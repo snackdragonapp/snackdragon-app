@@ -40,7 +40,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   const BLOG_BASE = 'https://blog.snackdragon.app';
   const BLOG_LINK = BLOG_BASE;
-  const CONTACT_LINK = `${BLOG_BASE}/contact`;
+  const ABOUT_LINK = `${BLOG_BASE}/about`;
   const PRIVACY_LINK = `${BLOG_BASE}/privacy`;
 
   return (
@@ -103,8 +103,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   Blog
                 </a>
                 <span aria-hidden="true">·</span>
-                <a className="underline hover:no-underline" href={CONTACT_LINK} target="_blank" rel="noreferrer">
-                  About Us
+                <a className="underline hover:no-underline" href={ABOUT_LINK} target="_blank" rel="noreferrer">
+                  About
                 </a>
                 <span aria-hidden="true">·</span>
                 <a className="underline hover:no-underline" href={PRIVACY_LINK} target="_blank" rel="noreferrer">
