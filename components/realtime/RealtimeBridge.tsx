@@ -68,7 +68,6 @@ export default function RealtimeBridge({
       debounceRef.current = window.setTimeout(
         () => {
           if (mounted) {
-            console.log('[REFRESH] realtime bridge (debounced)', { channel, table });
             router.refresh();
           }
           debounceRef.current = null;
@@ -137,22 +136,12 @@ export default function RealtimeBridge({
             : false;
       }
 
-      console.log('[RT] generic bridge event', {
-        channel,
-        table,
-        clientOpId,
-        matchedLocalOp,
-        ignore,
-        payload,
-      });
-
       if (!ignore) scheduleRefresh();
     };
 
     const run = async () => {
       const { data } = await supabase.auth.getUser();
       if (!mounted || !data.user) {
-        console.log('[RT] bridge: no authenticated user, skipping', { channel, table });
         return;
       }
 
@@ -201,7 +190,6 @@ export default function RealtimeBridge({
 
       chan = c.subscribe((status: ChannelStatus) => {
         if (!mounted) return;
-        console.log('[RT] generic bridge channel status', { channel, table, status });
 
         if (status === 'SUBSCRIBED') {
           setRtState('live');

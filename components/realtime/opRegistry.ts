@@ -58,9 +58,6 @@ function scheduleCleanup(id: string) {
     // If still present, drop it.
     if (pending.has(id)) {
       pending.delete(id);
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[opRegistry] gc', id);
-      }
       emitChange();
     }
     cleanupTimers.delete(id);
@@ -85,9 +82,6 @@ export function registerPendingOp(op: PendingOp) {
   clearCleanupTimer(op.id);
 
   pending.set(op.id, op);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[opRegistry] register', op);
-  }
   emitChange();
 }
 
@@ -106,10 +100,6 @@ export function completeOp(id: string) {
     savingEntryIds: [],
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[opRegistry] complete (clear saving)', id, pending.get(id));
-  }
-
   emitChange();
   scheduleCleanup(id);
 }
@@ -121,9 +111,6 @@ export function ackOp(id: string) {
   clearCleanupTimer(id);
   pending.delete(id);
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[opRegistry] ack', id, op);
-  }
   emitChange();
 }
 
@@ -165,9 +152,6 @@ export function ackOpByEntryId(entryId: string): boolean {
       clearCleanupTimer(id);
       pending.delete(id);
       matched = true;
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[opRegistry] ack by entryId', entryId, id, op);
-      }
     }
   }
   if (matched) {

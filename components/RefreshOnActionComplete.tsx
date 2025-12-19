@@ -36,12 +36,10 @@ export default function RefreshOnActionComplete({ debounceMs = 0 }: { debounceMs
       markLocalWrite();
       if (debounceMs > 0) {
         timer.current = window.setTimeout(() => {
-          console.log('[REFRESH] local form settle (1)', { debounceMs });
           router.refresh();
           timer.current = null;
         }, debounceMs);
       } else {
-        console.log('[REFRESH] local form settle (2)', { debounceMs });
         router.refresh();
       }
     }

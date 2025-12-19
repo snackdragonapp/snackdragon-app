@@ -143,14 +143,6 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
         }
       }
 
-      console.log('[RT] day entries event', {
-        dayId,
-        eventType,
-        clientOpId,
-        matchedLocalOp,
-        payload,
-      });
-
       if (matchedLocalOp) {
         // Local optimistic op just got its DB echo; UI is already up to date.
         return;
@@ -181,7 +173,6 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     const run = async () => {
       const { data } = await supabase.auth.getUser();
       if (!mounted || !data.user) {
-        console.log('[RT] day entries: no authenticated user, skipping');
         return;
       }
 
@@ -225,7 +216,6 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
 
       chan = c.subscribe((status: ChannelStatus) => {
         if (!mounted) return;
-        console.log('[RT] day entries channel status', { dayId, status });
         if (status === 'SUBSCRIBED') {
           setRtState('live');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
