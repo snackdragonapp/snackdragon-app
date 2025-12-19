@@ -167,11 +167,13 @@ export async function updateEntryQtyAction(formData: FormData) {
 
   let perUnit = entry.kcal_per_unit_snapshot as unknown as number | null;
 
-  if (perUnit == null) {
+  if (perUnit == null || perUnit === 0) { // Check for 0 too
     const baseQty = Number(entry.qty) || qty;
     const baseKcal = Number(entry.kcal_snapshot) || 0;
-    if (!Number.isFinite(baseQty) || baseQty <= 0) throw new Error('Cannot compute per-unit');
-    perUnit = Number((baseKcal / baseQty).toFixed(4));
+    // Only lock it in if we have actual data
+    if (baseKcal > 0 && baseQty > 0) {
+      perUnit = Number((baseKcal / baseQty).toFixed(4));
+    }
   }
 
   const newKcal = Number((qty * Number(perUnit)).toFixed(2));
