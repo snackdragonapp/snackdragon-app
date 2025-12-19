@@ -779,6 +779,10 @@ CREATE UNIQUE INDEX "catalog_items_user_name_unit_key" ON "public"."catalog_item
 
 
 
+CREATE INDEX "entries_catalog_item_id_idx" ON "public"."entries" USING "btree" ("catalog_item_id");
+
+
+
 CREATE UNIQUE INDEX "entries_day_ordering_key" ON "public"."entries" USING "btree" ("day_id", "ordering");
 
 
