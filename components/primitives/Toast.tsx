@@ -54,6 +54,8 @@ export default function ToastViewport() {
   const timers = useRef(new Map<string, number>());
 
   useEffect(() => {
+    const timersMap = timers.current;
+
     const onToast = (t: ToastItem) => {
       setItems((prev) => {
         const next = [...prev, t];
@@ -61,22 +63,22 @@ export default function ToastViewport() {
         return next.length > 3 ? next.slice(next.length - 3) : next;
       });
 
-      const existing = timers.current.get(t.id);
+      const existing = timersMap.get(t.id);
       if (existing) window.clearTimeout(existing);
 
       const timer = window.setTimeout(() => {
         setItems((prev) => prev.filter((x) => x.id !== t.id));
-        timers.current.delete(t.id);
+        timersMap.delete(t.id);
       }, t.durationMs);
 
-      timers.current.set(t.id, timer);
+      timersMap.set(t.id, timer);
     };
 
     listeners.add(onToast);
     return () => {
       listeners.delete(onToast);
-      for (const timer of timers.current.values()) window.clearTimeout(timer);
-      timers.current.clear();
+      for (const timer of timersMap.values()) window.clearTimeout(timer);
+      timersMap.clear();
     };
   }, []);
 

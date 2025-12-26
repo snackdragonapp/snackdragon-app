@@ -104,11 +104,9 @@ export default function RealtimeBridge({
           : null;
 
       let ignore = false;
-      let matchedLocalOp = false;
 
       // 1) Prefer op-id based matching (INSERT / UPDATE cases)
       if (clientOpId && hasPendingOp(clientOpId)) {
-        matchedLocalOp = true;
         ignore = true;
         ackOp(clientOpId);
       } else if (!clientOpId && eventType === 'DELETE') {
@@ -119,7 +117,6 @@ export default function RealtimeBridge({
             : null;
 
         if (entryId && ackOpByEntryId(entryId)) {
-          matchedLocalOp = true;
           ignore = true; // local delete; we already removed it optimistically
         } else {
           // no pending op -> treat as remote delete
