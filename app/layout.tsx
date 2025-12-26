@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server';
 import { logoutAction } from './auth-actions';
 import AppNav from '@/components/AppNav';
 import ClientAuthSync from '@/components/auth/ClientAuthSync';
+import ToastViewport from '@/components/primitives/Toast';
 export const dynamic = 'force-dynamic';
 
 const geistSans = Geist({
@@ -118,6 +119,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
           </div>
         </footer>
+
+        <ToastViewport />
       </body>
     </html>
   );

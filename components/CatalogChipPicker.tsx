@@ -8,6 +8,7 @@ import {
   emitEntryRealtimeChange,
   type Entry as DayEntry,
 } from '@/components/EntriesList';
+import { toast } from '@/components/primitives/Toast';
 
 type Item = {
   id: string;
@@ -113,7 +114,11 @@ function CatalogChipButton({
     const qty = baseQty * mult;
 
     if (!Number.isFinite(qty) || qty <= 0) {
-      alert('This catalog item has an invalid default serving. Edit it in Catalog first.');
+      toast({
+        tone: 'error',
+        message: 'This catalog item has an invalid default serving. Edit it in Catalog first.',
+        durationMs: 3500,
+      });
       return;
     }
 
@@ -134,6 +139,12 @@ function CatalogChipButton({
 
     // Push into EntriesList's local state immediately
     emitEntryAdded(optimisticEntry);
+
+    toast({
+      tone: 'success',
+      message: `Added: ${item.name}`,
+      durationMs: 1400,
+    });
 
     // Register this op locally so Realtime can recognize its echo
     registerPendingOp({
@@ -164,7 +175,11 @@ function CatalogChipButton({
         ackOp(opId);
         emitEntryRealtimeChange({ type: 'delete', id: entryId });
 
-        alert('Add failed. Please try again.');
+        toast({
+          tone: 'error',
+          message: 'Add failed. Please try again.',
+          durationMs: 3500,
+        });
       }
     })();
   };
