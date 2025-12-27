@@ -132,6 +132,7 @@ export function CatalogItemFields({
               className="w-full border rounded px-2 py-1 text-sm"
               placeholder="cup"
               required
+              autoCapitalize="none"
             />
             <p className="mt-1 text-[11px] text-subtle-foreground">
               e.g., cup, g, piece
