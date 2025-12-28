@@ -688,6 +688,19 @@ CREATE TABLE IF NOT EXISTS "public"."days" (
 ALTER TABLE "public"."days" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."dogs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "archived_at" timestamp with time zone,
+    CONSTRAINT "dogs_name_nonempty" CHECK (("char_length"("btrim"("name")) > 0))
+);
+
+
+ALTER TABLE "public"."dogs" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."entries" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "day_id" "uuid" NOT NULL,
@@ -760,6 +773,11 @@ ALTER TABLE ONLY "public"."days"
 
 
 
+ALTER TABLE ONLY "public"."dogs"
+    ADD CONSTRAINT "dogs_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."entries"
     ADD CONSTRAINT "entries_pkey" PRIMARY KEY ("id");
 
@@ -776,6 +794,10 @@ ALTER TABLE ONLY "public"."weights"
 
 
 CREATE UNIQUE INDEX "catalog_items_user_name_unit_key" ON "public"."catalog_items" USING "btree" ("user_id", "lower"("btrim"("name")), "lower"("btrim"("unit")));
+
+
+
+CREATE UNIQUE INDEX "dogs_user_name_key" ON "public"."dogs" USING "btree" ("user_id", "lower"("btrim"("name")));
 
 
 
@@ -800,6 +822,11 @@ CREATE INDEX "goals_user_start_idx" ON "public"."goals" USING "btree" ("user_id"
 
 
 CREATE INDEX "weights_user_measured_at_idx" ON "public"."weights" USING "btree" ("user_id", "measured_at" DESC, "created_at" DESC);
+
+
+
+ALTER TABLE ONLY "public"."dogs"
+    ADD CONSTRAINT "dogs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 
 
@@ -848,6 +875,25 @@ CREATE POLICY "days_select_own" ON "public"."days" FOR SELECT TO "authenticated"
 
 
 CREATE POLICY "days_update_own" ON "public"."days" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."dogs" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "dogs_delete_own" ON "public"."dogs" FOR DELETE TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "dogs_insert_own" ON "public"."dogs" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "dogs_select_own" ON "public"."dogs" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "dogs_update_own" ON "public"."dogs" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
 
 
 
@@ -1006,6 +1052,12 @@ GRANT ALL ON TABLE "public"."catalog_items" TO "service_role";
 GRANT ALL ON TABLE "public"."days" TO "anon";
 GRANT ALL ON TABLE "public"."days" TO "authenticated";
 GRANT ALL ON TABLE "public"."days" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dogs" TO "anon";
+GRANT ALL ON TABLE "public"."dogs" TO "authenticated";
+GRANT ALL ON TABLE "public"."dogs" TO "service_role";
 
 
 
