@@ -310,15 +310,37 @@ CREATE OR REPLACE FUNCTION "public"."get_or_create_day"("p_date" "date") RETURNS
     AS $$
 declare
   v_user uuid := auth.uid();  -- current authenticated user from JWT
+  v_dog  uuid;
   v_id   uuid;
 begin
   if v_user is null then
     raise exception 'unauthenticated' using errcode = '28000';
   end if;
 
-  insert into public.days (user_id, date)
-  values (v_user, p_date)
-  on conflict (user_id, date)
+  -- Pick oldest ACTIVE dog for this user (single-dog default behavior for now)
+  select d.id into v_dog
+  from public.dogs d
+  where d.user_id = v_user
+    and d.archived_at is null
+  order by d.created_at asc, d.id asc
+  limit 1;
+
+  -- Fallback (should be rare): if no active dogs, pick any dog
+  if v_dog is null then
+    select d.id into v_dog
+    from public.dogs d
+    where d.user_id = v_user
+    order by d.created_at asc, d.id asc
+    limit 1;
+  end if;
+
+  if v_dog is null then
+    raise exception 'no dog found for user' using errcode = '23514';
+  end if;
+
+  insert into public.days (user_id, dog_id, date)
+  values (v_user, v_dog, p_date)
+  on conflict (dog_id, date)
   do update set date = excluded.date  -- no-op update, ensures we RETURNing a row
   returning id into v_id;
 
@@ -668,7 +690,8 @@ CREATE TABLE IF NOT EXISTS "public"."catalog_items" (
     "unit" "text" NOT NULL,
     "kcal_per_unit" numeric(10,4) NOT NULL,
     "default_qty" numeric(10,2) NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "dog_id" "uuid" NOT NULL
 );
 
 ALTER TABLE ONLY "public"."catalog_items" REPLICA IDENTITY FULL;
@@ -681,7 +704,8 @@ CREATE TABLE IF NOT EXISTS "public"."days" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
     "date" "date" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "dog_id" "uuid" NOT NULL
 );
 
 
@@ -730,6 +754,7 @@ CREATE TABLE IF NOT EXISTS "public"."goals" (
     "kcal_target" integer NOT NULL,
     "note" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "dog_id" "uuid" NOT NULL,
     CONSTRAINT "goals_kcal_check" CHECK ((("kcal_target" >= 200) AND ("kcal_target" <= 5000)))
 );
 
@@ -749,6 +774,7 @@ CREATE TABLE IF NOT EXISTS "public"."weights" (
     "me_and_dog_kg" numeric(7,3),
     "note" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "dog_id" "uuid" NOT NULL,
     CONSTRAINT "weights_method_check" CHECK (("method" = ANY (ARRAY['vet'::"text", 'home_diff'::"text"])))
 );
 
@@ -764,12 +790,12 @@ ALTER TABLE ONLY "public"."catalog_items"
 
 
 ALTER TABLE ONLY "public"."days"
-    ADD CONSTRAINT "days_pkey" PRIMARY KEY ("id");
+    ADD CONSTRAINT "days_dog_id_date_key" UNIQUE ("dog_id", "date");
 
 
 
 ALTER TABLE ONLY "public"."days"
-    ADD CONSTRAINT "days_user_id_date_key" UNIQUE ("user_id", "date");
+    ADD CONSTRAINT "days_pkey" PRIMARY KEY ("id");
 
 
 
@@ -793,7 +819,7 @@ ALTER TABLE ONLY "public"."weights"
 
 
 
-CREATE UNIQUE INDEX "catalog_items_user_name_unit_key" ON "public"."catalog_items" USING "btree" ("user_id", "lower"("btrim"("name")), "lower"("btrim"("unit")));
+CREATE UNIQUE INDEX "catalog_items_dog_name_unit_key" ON "public"."catalog_items" USING "btree" ("dog_id", "lower"("btrim"("name")), "lower"("btrim"("unit")));
 
 
 
@@ -813,15 +839,25 @@ CREATE INDEX "entries_dayid_order_idx" ON "public"."entries" USING "btree" ("day
 
 
 
-CREATE UNIQUE INDEX "goals_user_start_date_key" ON "public"."goals" USING "btree" ("user_id", "start_date");
+CREATE UNIQUE INDEX "goals_dog_start_date_key" ON "public"."goals" USING "btree" ("dog_id", "start_date");
 
 
 
-CREATE INDEX "goals_user_start_idx" ON "public"."goals" USING "btree" ("user_id", "start_date" DESC, "created_at" DESC);
+CREATE INDEX "goals_dog_start_idx" ON "public"."goals" USING "btree" ("dog_id", "start_date" DESC, "created_at" DESC);
 
 
 
-CREATE INDEX "weights_user_measured_at_idx" ON "public"."weights" USING "btree" ("user_id", "measured_at" DESC, "created_at" DESC);
+CREATE INDEX "weights_dog_measured_at_idx" ON "public"."weights" USING "btree" ("dog_id", "measured_at" DESC, "created_at" DESC);
+
+
+
+ALTER TABLE ONLY "public"."catalog_items"
+    ADD CONSTRAINT "catalog_items_dog_id_fkey" FOREIGN KEY ("dog_id") REFERENCES "public"."dogs"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."days"
+    ADD CONSTRAINT "days_dog_id_fkey" FOREIGN KEY ("dog_id") REFERENCES "public"."dogs"("id") ON DELETE CASCADE;
 
 
 
@@ -840,41 +876,71 @@ ALTER TABLE ONLY "public"."entries"
 
 
 
-CREATE POLICY "catalog_delete_own" ON "public"."catalog_items" FOR DELETE TO "authenticated" USING (("user_id" = "auth"."uid"()));
+ALTER TABLE ONLY "public"."goals"
+    ADD CONSTRAINT "goals_dog_id_fkey" FOREIGN KEY ("dog_id") REFERENCES "public"."dogs"("id") ON DELETE CASCADE;
 
 
 
-CREATE POLICY "catalog_insert_own" ON "public"."catalog_items" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+ALTER TABLE ONLY "public"."weights"
+    ADD CONSTRAINT "weights_dog_id_fkey" FOREIGN KEY ("dog_id") REFERENCES "public"."dogs"("id") ON DELETE CASCADE;
+
+
+
+CREATE POLICY "catalog_delete_own" ON "public"."catalog_items" FOR DELETE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "catalog_items"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
+
+
+
+CREATE POLICY "catalog_insert_own" ON "public"."catalog_items" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "catalog_items"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
 ALTER TABLE "public"."catalog_items" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "catalog_select_own" ON "public"."catalog_items" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "catalog_select_own" ON "public"."catalog_items" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "catalog_items"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "catalog_update_own" ON "public"."catalog_items" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "catalog_update_own" ON "public"."catalog_items" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "catalog_items"."dog_id") AND ("dg"."user_id" = "auth"."uid"())))))) WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "catalog_items"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
 ALTER TABLE "public"."days" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "days_delete_own" ON "public"."days" FOR DELETE TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "days_delete_own" ON "public"."days" FOR DELETE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "days"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "days_insert_own" ON "public"."days" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "days_insert_own" ON "public"."days" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "days"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "days_select_own" ON "public"."days" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "days_select_own" ON "public"."days" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "days"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "days_update_own" ON "public"."days" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "days_update_own" ON "public"."days" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "days"."dog_id") AND ("dg"."user_id" = "auth"."uid"())))))) WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "days"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
@@ -929,38 +995,58 @@ CREATE POLICY "entries_update_via_day" ON "public"."entries" FOR UPDATE TO "auth
 ALTER TABLE "public"."goals" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "goals_delete_own" ON "public"."goals" FOR DELETE TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "goals_delete_own" ON "public"."goals" FOR DELETE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "goals"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "goals_insert_own" ON "public"."goals" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "goals_insert_own" ON "public"."goals" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "goals"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "goals_select_own" ON "public"."goals" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "goals_select_own" ON "public"."goals" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "goals"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "goals_update_own" ON "public"."goals" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "goals_update_own" ON "public"."goals" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "goals"."dog_id") AND ("dg"."user_id" = "auth"."uid"())))))) WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "goals"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
 ALTER TABLE "public"."weights" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "weights_delete_own" ON "public"."weights" FOR DELETE TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "weights_delete_own" ON "public"."weights" FOR DELETE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "weights"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "weights_insert_own" ON "public"."weights" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "weights_insert_own" ON "public"."weights" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "weights"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "weights_select_own" ON "public"."weights" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "weights_select_own" ON "public"."weights" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "weights"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "weights_update_own" ON "public"."weights" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "weights_update_own" ON "public"."weights" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "weights"."dog_id") AND ("dg"."user_id" = "auth"."uid"())))))) WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."dogs" "dg"
+  WHERE (("dg"."id" = "weights"."dog_id") AND ("dg"."user_id" = "auth"."uid"()))))));
 
 
 
