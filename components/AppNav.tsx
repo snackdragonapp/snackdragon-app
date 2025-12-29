@@ -34,12 +34,14 @@ export default function AppNav() {
   const weightsHref = `/weights?next=${encodeURIComponent(dayHref)}`;
   const goalsHref = `/goals?next=${encodeURIComponent(dayHref)}`;
   const chartsHref = `/charts?next=${encodeURIComponent(dayHref)}`;
+  const dogsHref = `/dogs?next=${encodeURIComponent(dayHref)}`;
 
   const isDay = pathname.startsWith('/day/');
   const isCatalog = pathname.startsWith('/catalog');
   const isWeights = pathname.startsWith('/weights');
   const isGoals = pathname.startsWith('/goals');
   const isCharts = pathname.startsWith('/charts');
+  const isDogs = pathname.startsWith('/dogs');
 
   const base =
     'rounded px-3 py-1 text-sm border hover:bg-nav-item-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
@@ -58,6 +60,7 @@ export default function AppNav() {
           <li><Link href={goalsHref} className={`${base} ${isGoals ? active : ''}`} aria-current={isGoals ? 'page' : undefined}>Goals</Link></li>
           <li><Link href={weightsHref} className={`${base} ${isWeights ? active : ''}`} aria-current={isWeights ? 'page' : undefined}>Weights</Link></li>
           <li><Link href={chartsHref} className={`${base} ${isCharts ? active : ''}`} aria-current={isCharts ? 'page' : undefined}>Charts</Link></li>
+          <li><Link href={dogsHref} className={`${base} ${isDogs ? active : ''}`} aria-current={isDogs ? 'page' : undefined}>Dogs</Link></li>
         </ul>
       </div>
     </nav>

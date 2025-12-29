@@ -1,58 +1,115 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { safeNextPath } from '@/lib/safeNext';
 
+function dogsUrl(next: string | null, errorMessage?: string | null) {
+  const qs = new URLSearchParams();
+  if (next) qs.set('next', next);
+  if (errorMessage) qs.set('error', errorMessage);
+  const s = qs.toString();
+  return s ? `/dogs?${s}` : '/dogs';
+}
+
 export async function createDogAction(formData: FormData) {
   const supabase = await createClient();
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) throw new Error('Must be signed in');
 
-  if (!user) {
-    throw new Error('Must be signed in');
-  }
-
-  const next = safeNextPath(formData.get('next')) ?? '/day/today';
-
-  // If the user already has an active dog, this setup action is no longer needed.
-  const { data: existingDogs, error: existingDogsError } = await supabase
-    .from('dogs')
-    .select('id')
-    .is('archived_at', null)
-    .limit(1);
-
-  if (!existingDogsError && (existingDogs ?? []).length > 0) {
-    redirect(next);
-  }
-
-  const name = String(formData.get('name') ?? '').trim();
+  const rawName = String(formData.get('name') ?? '');
+  const name = rawName.trim();
+  const rawNext = String(formData.get('next') ?? '');
+  const next = safeNextPath(rawNext) || '/day/today';
 
   if (!name) {
     const qs = new URLSearchParams();
-    qs.set('error', 'Dog name is required.');
+    qs.set('error', 'Name is required.');
     qs.set('next', next);
     redirect(`/setup/dog?${qs.toString()}`);
   }
 
-  const { error } = await supabase.from('dogs').insert({
-    user_id: user.id,
-    name,
-  });
+  const { data, error } = await supabase
+    .from('dogs')
+    .insert({ user_id: user.id, name })
+    .select('id')
+    .single();
 
   if (error) {
     const qs = new URLSearchParams();
-    qs.set(
-      'error',
-      (error as any)?.code === '23505'
-        ? 'You already have a dog with that name.'
-        : error.message
-    );
     qs.set('next', next);
+    if ((error as any)?.code === '23505') {
+      qs.set('error', 'You already have a dog with that name.');
+    } else {
+      qs.set('error', error.message);
+    }
     redirect(`/setup/dog?${qs.toString()}`);
   }
 
+  // Go to next (or default day) after successful creation
   redirect(next);
+}
+
+export async function renameDogAction(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('Must be signed in');
+
+  const rawNext = String(formData.get('next') ?? '');
+  const next = safeNextPath(rawNext);
+
+  const id = String(formData.get('id') ?? '').trim();
+  const name = String(formData.get('name') ?? '').trim();
+
+  if (!id) {
+    redirect(dogsUrl(next, 'Missing dog id.'));
+  }
+  if (!name) {
+    redirect(dogsUrl(next, 'Name is required.'));
+  }
+
+  const { error } = await supabase.from('dogs').update({ name }).eq('id', id);
+
+  if (error) {
+    if ((error as any)?.code === '23505') {
+      redirect(dogsUrl(next, 'You already have a dog with that name.'));
+    }
+    redirect(dogsUrl(next, error.message));
+  }
+
+  revalidatePath('/dogs');
+  redirect(dogsUrl(next));
+}
+
+export async function archiveDogAction(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('Must be signed in');
+
+  const rawNext = String(formData.get('next') ?? '');
+  const next = safeNextPath(rawNext);
+
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) {
+    redirect(dogsUrl(next, 'Missing dog id.'));
+  }
+
+  const { error } = await supabase
+    .from('dogs')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    redirect(dogsUrl(next, error.message));
+  }
+
+  revalidatePath('/dogs');
+  redirect(dogsUrl(next));
 }
