@@ -5,9 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { safeNextPath } from '@/lib/safeNext';
 
-function dogsUrl(next: string | null, errorMessage?: string | null) {
+function dogsUrl(
+  next: string | null,
+  showArchived: boolean,
+  errorMessage?: string | null
+) {
   const qs = new URLSearchParams();
   if (next) qs.set('next', next);
+  if (showArchived) qs.set('show_archived', '1');
   if (errorMessage) qs.set('error', errorMessage);
   const s = qs.toString();
   return s ? `/dogs?${s}` : '/dogs';
@@ -32,11 +37,9 @@ export async function createDogAction(formData: FormData) {
     redirect(`/setup/dog?${qs.toString()}`);
   }
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('dogs')
-    .insert({ user_id: user.id, name })
-    .select('id')
-    .single();
+    .insert({ user_id: user.id, name });
 
   if (error) {
     const qs = new URLSearchParams();
@@ -49,7 +52,6 @@ export async function createDogAction(formData: FormData) {
     redirect(`/setup/dog?${qs.toString()}`);
   }
 
-  // Go to next (or default day) after successful creation
   redirect(next);
 }
 
@@ -63,27 +65,29 @@ export async function renameDogAction(formData: FormData) {
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);
 
+  const showArchived = String(formData.get('show_archived') ?? '') === '1';
+
   const id = String(formData.get('id') ?? '').trim();
   const name = String(formData.get('name') ?? '').trim();
 
   if (!id) {
-    redirect(dogsUrl(next, 'Missing dog id.'));
+    redirect(dogsUrl(next, showArchived, 'Missing dog id.'));
   }
   if (!name) {
-    redirect(dogsUrl(next, 'Name is required.'));
+    redirect(dogsUrl(next, showArchived, 'Name is required.'));
   }
 
   const { error } = await supabase.from('dogs').update({ name }).eq('id', id);
 
   if (error) {
     if ((error as any)?.code === '23505') {
-      redirect(dogsUrl(next, 'You already have a dog with that name.'));
+      redirect(dogsUrl(next, showArchived, 'You already have a dog with that name.'));
     }
-    redirect(dogsUrl(next, error.message));
+    redirect(dogsUrl(next, showArchived, error.message));
   }
 
   revalidatePath('/dogs');
-  redirect(dogsUrl(next));
+  redirect(dogsUrl(next, showArchived));
 }
 
 export async function archiveDogAction(formData: FormData) {
@@ -96,9 +100,11 @@ export async function archiveDogAction(formData: FormData) {
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);
 
+  const showArchived = String(formData.get('show_archived') ?? '') === '1';
+
   const id = String(formData.get('id') ?? '').trim();
   if (!id) {
-    redirect(dogsUrl(next, 'Missing dog id.'));
+    redirect(dogsUrl(next, showArchived, 'Missing dog id.'));
   }
 
   const { error } = await supabase
@@ -107,9 +113,39 @@ export async function archiveDogAction(formData: FormData) {
     .eq('id', id);
 
   if (error) {
-    redirect(dogsUrl(next, error.message));
+    redirect(dogsUrl(next, showArchived, error.message));
   }
 
   revalidatePath('/dogs');
-  redirect(dogsUrl(next));
+  redirect(dogsUrl(next, showArchived));
+}
+
+export async function restoreDogAction(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('Must be signed in');
+
+  const rawNext = String(formData.get('next') ?? '');
+  const next = safeNextPath(rawNext);
+
+  const showArchived = String(formData.get('show_archived') ?? '') === '1';
+
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) {
+    redirect(dogsUrl(next, showArchived, 'Missing dog id.'));
+  }
+
+  const { error } = await supabase
+    .from('dogs')
+    .update({ archived_at: null })
+    .eq('id', id);
+
+  if (error) {
+    redirect(dogsUrl(next, showArchived, error.message));
+  }
+
+  revalidatePath('/dogs');
+  redirect(dogsUrl(next, showArchived));
 }
