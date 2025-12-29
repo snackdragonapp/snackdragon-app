@@ -45,6 +45,10 @@ export default function AppNav() {
     'rounded px-3 py-1 text-sm border hover:bg-nav-item-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
   const active = 'bg-nav-item-active font-medium';
 
+  // Hide the app nav during onboarding/setup flows.
+  const inSetup = pathname === '/setup' || pathname.startsWith('/setup/');
+  if (inSetup) return null;
+
   return (
     <nav className="border-t bg-header">
       <div className="mx-auto max-w-2xl p-2">

@@ -49,6 +49,17 @@ export async function loginAction(formData: FormData) {
   // 👇 ensures cookies are attached to THIS response before redirect
   await supabase.auth.getUser();
 
+  // Phase 2 setup gate: if signed in and no active dogs, force /setup/dog
+  const { data: dogs, error: dogsErr } = await supabase
+    .from('dogs')
+    .select('id')
+    .is('archived_at', null)
+    .limit(1);
+
+  if (!dogsErr && (dogs ?? []).length === 0) {
+    redirect(`/setup/dog?next=${encodeURIComponent(next)}`);
+  }
+
   redirect(next);
 }
 

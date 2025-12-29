@@ -1,13 +1,22 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { safeNextPath } from '@/lib/safeNext';
+
+const PUBLIC_PATHS = new Set([
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/setup/dog',
+]);
 
 export async function updateSession(request: NextRequest) {
   // Prepare a response we can attach cookies to
   const response = NextResponse.next();
 
   const supabase = createServerClient(
-    process.env.SUPABASE_URL!,          // you already have these in .env.local
-    process.env.SUPABASE_ANON_KEY!,     // (anon/public key)
+    process.env.SUPABASE_URL!, // you already have these in .env.local
+    process.env.SUPABASE_ANON_KEY!, // (anon/public key)
     {
       cookies: {
         get(name: string) {
@@ -30,7 +39,35 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Trigger refresh if needed; any cookie writes happen on `response`
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Phase 2 setup gate: signed-in users must have at least one active dog
+  if (user && !PUBLIC_PATHS.has(request.nextUrl.pathname)) {
+    const { data: dogs, error } = await supabase
+      .from('dogs')
+      .select('id')
+      .is('archived_at', null)
+      .limit(1);
+
+    if (!error && (dogs ?? []).length === 0) {
+      const rawNext = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+      const next = safeNextPath(rawNext) ?? '/day/today';
+
+      const url = new URL('/setup/dog', request.url);
+      url.searchParams.set('next', next);
+
+      const redirectResponse = NextResponse.redirect(url);
+
+      // Preserve any auth cookie mutations from the session refresh above.
+      for (const c of response.cookies.getAll()) {
+        redirectResponse.cookies.set(c);
+      }
+
+      return redirectResponse;
+    }
+  }
 
   return response;
 }
