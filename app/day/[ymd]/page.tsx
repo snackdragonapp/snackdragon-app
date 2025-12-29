@@ -2,6 +2,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import {
   isValidYMD,
   addDaysYMD,
@@ -34,12 +35,15 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
     redirect(`/login?next=${encodeURIComponent(`/day/${selectedYMD}`)}`);
   }
 
+  const dogId = await resolveDogId(supabase);
+
   // Nav dates (pure date math on literal YYYY-MM-DD)
   const prevYMD = addDaysYMD(selectedYMD, -1);
   const nextYMD = addDaysYMD(selectedYMD, +1);
 
   // Ensure a "day" row exists for this date and get its id (creates if needed).
   const { data: dayId, error: dayErr } = await supabase.rpc('get_or_create_day', {
+    p_dog_id: dogId,
     p_date: selectedYMD,
   });
   if (dayErr) {
@@ -91,13 +95,16 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
 
   // Ordered by: last used date desc, then first appearance that day asc,
   // then name asc for never-used items.
-  const { data: orderedItems } = await supabase.rpc('get_catalog_items_usage_order');
+  const { data: orderedItems } = await supabase.rpc('get_catalog_items_usage_order', {
+    p_dog_id: dogId,
+  });
   const chipItems = orderedItems ?? []; // let the picker limit what it shows
 
   // Active goal for this day (latest start_date <= selectedYMD)
   const { data: goalRows } = await supabase
     .from('goals')
     .select('start_date,kcal_target')
+    .eq('dog_id', dogId)
     .lte('start_date', selectedYMD)
     .order('start_date', { ascending: false })
     .limit(1);

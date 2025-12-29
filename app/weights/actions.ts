@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import { isValidYMD } from '@/lib/dates';
 import { safeNextPath } from '@/lib/safeNext';
 
@@ -26,6 +27,11 @@ export async function createWeightAction(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Must be signed in');
+
+  const dogIdRaw = formData.get('dog_id');
+  const dogId =
+    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
+  const resolvedDogId = await resolveDogId(supabase, dogId);
 
   // Optional return target + intent
   const rawNext = String(formData.get('next') ?? '');
@@ -59,6 +65,7 @@ export async function createWeightAction(formData: FormData) {
 
   const { error } = await supabase.from('weights').insert({
     user_id: user.id,
+    dog_id: resolvedDogId,
     measured_at: measuredAt,
     method,
     weight_kg: weightKg,

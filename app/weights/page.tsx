@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import WeightAddForm from '@/components/WeightAddForm';
 import DataList from '@/components/primitives/DataList';
 import WeightListRow from '@/components/WeightListRow';
@@ -28,10 +29,13 @@ export default async function WeightsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
+  const dogId = await resolveDogId(supabase);
+
   // Fetch weights for the user (newest first)
   const { data: weights } = await supabase
     .from('weights')
     .select('id, measured_at, method, weight_kg, me_kg, me_and_dog_kg, note, created_at')
+    .eq('dog_id', dogId)
     .order('measured_at', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -76,6 +80,7 @@ export default async function WeightsPage({
       <RealtimeBridge
         channel="rt-weights"
         table="weights"
+        filter={`dog_id=eq.${dogId}`}
         devLabel="Weights"
       />
     </main>

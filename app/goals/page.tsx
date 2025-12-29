@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import { addDaysYMD } from '@/lib/dates';
 import { createGoalAction } from './actions';
 import GoalAddForm from '@/components/GoalAddForm';
@@ -29,10 +30,13 @@ export default async function GoalsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
+  const dogId = await resolveDogId(supabase);
+
   // Load goals, newest start_date first
   const { data: goals } = await supabase
     .from('goals')
     .select('id,start_date,kcal_target,note,created_at')
+    .eq('dog_id', dogId)
     .order('start_date', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -85,6 +89,7 @@ export default async function GoalsPage({
       <RealtimeBridge
         channel="rt-goals"
         table="goals"
+        filter={`dog_id=eq.${dogId}`}
         devLabel="Goals"
       />
     </main>

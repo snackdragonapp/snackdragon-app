@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import { parsePositiveNumber, parsePositiveDecimal } from '@/lib/quantity';
 import { safeNextPath } from '@/lib/safeNext';
 
@@ -50,6 +51,11 @@ export async function createCatalogItemAction(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Must be signed in');
 
+  const dogIdRaw = formData.get('dog_id');
+  const dogId =
+    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
+  const resolvedDogId = await resolveDogId(supabase, dogId);
+
   // Optional return target + intent
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);
@@ -67,6 +73,7 @@ export async function createCatalogItemAction(formData: FormData) {
 
   const { error } = await supabase.from('catalog_items').insert({
     user_id: user.id,
+    dog_id: resolvedDogId,
     name,
     unit,
     kcal_per_unit: kcalPerUnit,

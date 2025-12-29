@@ -61,8 +61,9 @@ begin
     raise exception 'unauthenticated' using errcode = '28000';
   end if;
 
-  select d.user_id into v_owner
+  select dg.user_id into v_owner
   from public.days d
+  join public.dogs dg on dg.id = d.dog_id
   where d.id = p_day_id;
 
   if v_owner is null or v_owner <> v_user then
@@ -138,8 +139,9 @@ begin
     raise exception 'unauthenticated' using errcode = '28000';
   end if;
 
-  select d.user_id into v_owner
+  select dg.user_id into v_owner
   from public.days d
+  join public.dogs dg on dg.id = d.dog_id
   where d.id = p_day_id;
 
   if v_owner is null or v_owner <> v_user then
@@ -219,7 +221,8 @@ begin
     into v_day
   from public.entries e
   join public.days d on d.id = e.day_id
-  where e.id = p_entry_id and d.user_id = v_user
+  join public.dogs dg on dg.id = d.dog_id
+  where e.id = p_entry_id and dg.user_id = v_user
   for update;
 
   if v_day is null then
@@ -243,23 +246,33 @@ $$;
 ALTER FUNCTION "public"."delete_entry_with_op"("p_entry_id" "uuid", "p_client_op_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."get_catalog_items_usage_order"() RETURNS TABLE("id" "uuid", "name" "text", "unit" "text", "kcal_per_unit" numeric, "default_qty" numeric, "created_at" timestamp with time zone, "last_used_date" "date", "first_order_on_last_day" integer)
+CREATE OR REPLACE FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") RETURNS TABLE("id" "uuid", "name" "text", "unit" "text", "kcal_per_unit" numeric, "default_qty" numeric, "created_at" timestamp with time zone, "last_used_date" "date", "first_order_on_last_day" integer)
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 WITH last_use AS (
-  SELECT e.catalog_item_id AS id, MAX(d.date) AS last_date
+  SELECT
+    e.catalog_item_id,
+    max(d.date) AS last_used_date
   FROM public.entries e
-  JOIN public.days d ON d.id = e.day_id
-  WHERE d.user_id = auth.uid()
+  JOIN public.days d on d.id = e.day_id
+  JOIN public.dogs dg on dg.id = d.dog_id
+  WHERE e.catalog_item_id IS NOT NULL
+    AND dg.id = p_dog_id
+    AND dg.user_id = auth.uid()
   GROUP BY e.catalog_item_id
-),
-first_pos AS (
-  SELECT e.catalog_item_id AS id, d.date, MIN(e.ordering) AS first_order
+), first_order AS (
+  SELECT
+    e.catalog_item_id,
+    min(e.ordering) AS first_order_on_last_day
   FROM public.entries e
-  JOIN public.days d ON d.id = e.day_id
-  WHERE d.user_id = auth.uid()
-  GROUP BY e.catalog_item_id, d.date
+  JOIN public.days d on d.id = e.day_id
+  JOIN public.dogs dg on dg.id = d.dog_id
+  JOIN last_use lu on lu.catalog_item_id = e.catalog_item_id AND lu.last_used_date = d.date
+  WHERE e.catalog_item_id IS NOT NULL
+    AND dg.id = p_dog_id
+    AND dg.user_id = auth.uid()
+  GROUP BY e.catalog_item_id
 )
 SELECT
   ci.id,
@@ -268,88 +281,85 @@ SELECT
   ci.kcal_per_unit,
   ci.default_qty,
   ci.created_at,
-  lu.last_date AS last_used_date,
-  fp.first_order AS first_order_on_last_day
+  lu.last_used_date,
+  fo.first_order_on_last_day
 FROM public.catalog_items ci
-LEFT JOIN last_use lu ON lu.id = ci.id
-LEFT JOIN first_pos fp ON fp.id = ci.id AND fp.date = lu.last_date
-WHERE ci.user_id = auth.uid()
+JOIN public.dogs dg on dg.id = ci.dog_id
+LEFT JOIN last_use lu on lu.catalog_item_id = ci.id
+LEFT JOIN first_order fo on fo.catalog_item_id = ci.id
+WHERE dg.id = p_dog_id
+  AND dg.user_id = auth.uid()
 ORDER BY
-  lu.last_date DESC NULLS LAST,         -- most recent day used first
-  fp.first_order ASC NULLS LAST,        -- earlier first-appearance that day first
-  LOWER(BTRIM(ci.name)) ASC;            -- never-used go last, alphabetical
+  lu.last_used_date DESC NULLS LAST,
+  fo.first_order_on_last_day ASC NULLS LAST,
+  ci.name ASC;
 $$;
 
 
-ALTER FUNCTION "public"."get_catalog_items_usage_order"() OWNER TO "postgres";
+ALTER FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."get_daily_kcal_totals"() RETURNS TABLE("date" "date", "planned_kcal" numeric, "eaten_kcal" numeric, "total_kcal" numeric)
+CREATE OR REPLACE FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") RETURNS TABLE("date" "date", "planned_kcal" numeric, "eaten_kcal" numeric, "total_kcal" numeric)
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
+with sums as (
+  select
+    d.date,
+    sum(case when e.status = 'planned' then e.kcal_snapshot else 0 end) as planned_kcal,
+    sum(case when e.status = 'eaten' then e.kcal_snapshot else 0 end) as eaten_kcal,
+    sum(e.kcal_snapshot) as total_kcal
+  from public.days d
+  join public.dogs dg on dg.id = d.dog_id
+  left join public.entries e on e.day_id = d.id
+  where dg.id = p_dog_id
+    and dg.user_id = auth.uid()
+  group by d.date
+)
 select
-  d.date,
-  coalesce(sum(case when e.status = 'planned' then e.kcal_snapshot end), 0)::numeric as planned_kcal,
-  coalesce(sum(case when e.status = 'eaten'   then e.kcal_snapshot end), 0)::numeric as eaten_kcal,
-  coalesce(sum(e.kcal_snapshot), 0)::numeric                                  as total_kcal
-from public.days d
-left join public.entries e on e.day_id = d.id
-where d.user_id = auth.uid()
-group by d.date
-order by d.date;
+  date,
+  coalesce(planned_kcal, 0) as planned_kcal,
+  coalesce(eaten_kcal, 0) as eaten_kcal,
+  coalesce(total_kcal, 0) as total_kcal
+from sums
+order by date asc;
 $$;
 
 
-ALTER FUNCTION "public"."get_daily_kcal_totals"() OWNER TO "postgres";
+ALTER FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."get_or_create_day"("p_date" "date") RETURNS "uuid"
+CREATE OR REPLACE FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 declare
-  v_user uuid := auth.uid();  -- current authenticated user from JWT
-  v_dog  uuid;
-  v_id   uuid;
+  v_user uuid := auth.uid();
+  v_day uuid;
 begin
-  if v_user is null then
-    raise exception 'unauthenticated' using errcode = '28000';
-  end if;
+  if v_user is null then raise exception 'unauthenticated' using errcode = '28000'; end if;
 
-  -- Pick oldest ACTIVE dog for this user (single-dog default behavior for now)
-  select d.id into v_dog
-  from public.dogs d
-  where d.user_id = v_user
-    and d.archived_at is null
-  order by d.created_at asc, d.id asc
-  limit 1;
-
-  -- Fallback (should be rare): if no active dogs, pick any dog
-  if v_dog is null then
-    select d.id into v_dog
+  -- Validate the dog belongs to the caller
+  if not exists (
+    select 1
     from public.dogs d
-    where d.user_id = v_user
-    order by d.created_at asc, d.id asc
-    limit 1;
-  end if;
-
-  if v_dog is null then
-    raise exception 'no dog found for user' using errcode = '23514';
+    where d.id = p_dog_id and d.user_id = v_user
+  ) then
+    raise exception 'forbidden: dog not owned by caller' using errcode = '42501';
   end if;
 
   insert into public.days (user_id, dog_id, date)
-  values (v_user, v_dog, p_date)
+  values (v_user, p_dog_id, p_date)
   on conflict (dog_id, date)
-  do update set date = excluded.date  -- no-op update, ensures we RETURNing a row
-  returning id into v_id;
+  do update set date = excluded.date
+  returning id into v_day;
 
-  return v_id;
+  return v_day;
 end;
 $$;
 
 
-ALTER FUNCTION "public"."get_or_create_day"("p_date" "date") OWNER TO "postgres";
+ALTER FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."move_entry"("p_entry_id" "uuid", "p_dir" "text") RETURNS "void"
@@ -373,8 +383,9 @@ begin
     into v_day, v_pos
   from public.entries e
   join public.days d on d.id = e.day_id
+  join public.dogs dg on dg.id = d.dog_id
   where e.id = p_entry_id
-    and d.user_id = v_user
+    and dg.user_id = v_user
   for update;
 
   if v_day is null then
@@ -450,8 +461,10 @@ begin
 
   -- Ensure the day belongs to the caller.
   if not exists (
-    select 1 from public.days d
-    where d.id = p_day_id and d.user_id = v_user
+    select 1
+    from public.days d
+    join public.dogs dg on dg.id = d.dog_id
+    where d.id = p_day_id and dg.user_id = v_user
   ) then
     raise exception 'forbidden: day not owned by caller' using errcode = '42501';
   end if;
@@ -508,8 +521,10 @@ begin
 
   -- Ensure the day belongs to the caller.
   if not exists (
-    select 1 from public.days d
-    where d.id = p_day_id and d.user_id = v_user
+    select 1
+    from public.days d
+    join public.dogs dg on dg.id = d.dog_id
+    where d.id = p_day_id and dg.user_id = v_user
   ) then
     raise exception 'forbidden: day not owned by caller'
       using errcode = '42501';
@@ -583,7 +598,8 @@ begin
     into v_day, v_per_unit, v_old_qty, v_old_kcal
   from public.entries e
   join public.days d on d.id = e.day_id
-  where e.id = p_entry_id and d.user_id = v_user
+  join public.dogs dg on dg.id = d.dog_id
+  where e.id = p_entry_id and dg.user_id = v_user
   for update;
 
   if v_day is null then
@@ -644,7 +660,8 @@ begin
     into v_day, v_per_unit, v_old_qty, v_old_kcal
   from public.entries e
   join public.days d on d.id = e.day_id
-  where e.id = p_entry_id and d.user_id = v_user
+  join public.dogs dg on dg.id = d.dog_id
+  where e.id = p_entry_id and dg.user_id = v_user
   for update;
 
   if v_day is null then
@@ -1081,21 +1098,21 @@ GRANT ALL ON FUNCTION "public"."delete_entry_with_op"("p_entry_id" "uuid", "p_cl
 
 
 
-GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"() TO "anon";
-GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"() TO "service_role";
+GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"() TO "anon";
-GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"() TO "service_role";
+GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_date" "date") TO "anon";
-GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_date" "date") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_date" "date") TO "service_role";
+GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") TO "service_role";
 
 
 

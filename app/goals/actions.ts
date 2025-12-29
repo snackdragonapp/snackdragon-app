@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import { isValidYMD } from '@/lib/dates';
 import { safeNextPath } from '@/lib/safeNext';
 
@@ -20,6 +21,11 @@ export async function createGoalAction(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Must be signed in');
 
+  const dogIdRaw = formData.get('dog_id');
+  const dogId =
+    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
+  const resolvedDogId = await resolveDogId(supabase, dogId);
+
   // Optional return target + intent
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);
@@ -35,17 +41,18 @@ export async function createGoalAction(formData: FormData) {
 
   const note = String(formData.get('note') ?? '').trim() || null;
 
-  // Upsert by (user_id, start_date): replaces any existing goal for that day
+  // Upsert by (dog_id, start_date): replaces any existing goal for that day
   const { error } = await supabase
     .from('goals')
     .upsert(
       {
         user_id: user.id,
+        dog_id: resolvedDogId,
         start_date: startDate,
         kcal_target: kcalTarget,
         note,
       },
-      { onConflict: 'user_id,start_date' }
+      { onConflict: 'dog_id,start_date' }
     );
 
   if (error) throw new Error(error.message);

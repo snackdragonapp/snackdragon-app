@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import ChartsClient from '@/components/ChartsClient';
 import RealtimeBridge from '@/components/realtime/RealtimeBridge';
 import { safeNextPath } from '@/lib/safeNext';
@@ -39,21 +40,25 @@ export default async function ChartsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
+  const dogId = await resolveDogId(supabase);
+
   // Build queries with proper result typing
   const weightsQ = supabase
     .from('weights')
     .select('measured_at,weight_kg')
+    .eq('dog_id', dogId)
     .order('measured_at', { ascending: true })
     .returns<WeightRow[]>();
 
   const goalsQ = supabase
     .from('goals')
     .select('start_date,kcal_target')
+    .eq('dog_id', dogId)
     .order('start_date', { ascending: true })
     .returns<GoalRow[]>();
 
   const dailyQ = supabase
-    .rpc('get_daily_kcal_totals')
+    .rpc('get_daily_kcal_totals', { p_dog_id: dogId })
     .returns<DailyRow[]>();
 
   // Promise.all wants real Promises in some TS setups; .then(r => r) makes it explicit
@@ -127,12 +132,14 @@ export default async function ChartsPage({
       <RealtimeBridge
         channel="rt-charts-goals"
         table="goals"
+        filter={`dog_id=eq.${dogId}`}
         devLabel="Charts: goals"
         showIndicator={false}  // avoid 3 overlapping pills; entries one is enough
       />
       <RealtimeBridge
         channel="rt-charts-weights"
         table="weights"
+        filter={`dog_id=eq.${dogId}`}
         devLabel="Charts: weights"
         showIndicator={false}
       />

@@ -2,6 +2,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import { isValidYMD } from '@/lib/dates';
 
 // Simple helper: generate a client op-id for this server action call.
@@ -98,8 +99,16 @@ export async function addEntryFromCatalogAction(formData: FormData) {
   if (!itemId) throw new Error('Missing catalog_item_id');
   if (!Number.isFinite(mult) || mult <= 0) throw new Error('Invalid multiplier');
 
+  const dogIdRaw = formData.get('dog_id');
+  const dogId =
+    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
+  const resolvedDogId = await resolveDogId(supabase, dogId);
+
   // Ensure selected day exists → get day_id
-  const { data: dayId, error: dayErr } = await supabase.rpc('get_or_create_day', { p_date: dayDate });
+  const { data: dayId, error: dayErr } = await supabase.rpc('get_or_create_day', {
+    p_dog_id: resolvedDogId,
+    p_date: dayDate,
+  });
   if (dayErr) throw new Error(dayErr.message);
 
   // Load item (RLS: only your item is visible)
@@ -107,6 +116,7 @@ export async function addEntryFromCatalogAction(formData: FormData) {
     .from('catalog_items')
     .select('id,name,unit,kcal_per_unit,default_qty')
     .eq('id', itemId)
+    .eq('dog_id', resolvedDogId)
     .single();
 
   if (itemErr) throw new Error(itemErr.message);
@@ -201,6 +211,7 @@ export async function updateEntryQtyAction(formData: FormData) {
 export async function reorderEntriesAction(input: {
   date: string;
   ids: string[];
+  dog_id?: string;
   client_op_id?: string;
 }) {
  const supabase = await createClient();
@@ -209,11 +220,16 @@ export async function reorderEntriesAction(input: {
 
   if (!isValidYMD(input.date)) throw new Error('Missing or invalid date');
 
+  const dogId =
+    typeof input.dog_id === 'string' && input.dog_id.trim() ? input.dog_id.trim() : null;
+  const resolvedDogId = await resolveDogId(supabase, dogId);
+
   // Get existing day id (don’t silently create a new day if not there)
   const { data: day } = await supabase
     .from('days')
     .select('id')
     .eq('date', input.date)
+    .eq('dog_id', resolvedDogId)
     .maybeSingle();
 
   if (!day) {

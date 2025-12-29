@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
 import { createCatalogItemAction, updateCatalogItemAction } from './actions';
 import CatalogAddForm from '@/components/CatalogAddForm';
 import CatalogRow from '@/components/CatalogRow';
@@ -27,9 +28,12 @@ export default async function CatalogPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
+  const dogId = await resolveDogId(supabase);
+
   const { data: items } = await supabase
     .from('catalog_items')
     .select('id,name,unit,kcal_per_unit,default_qty,created_at')
+    .eq('dog_id', dogId)
     .order('name', { ascending: true });
 
   return (
@@ -69,6 +73,7 @@ export default async function CatalogPage({
       <RealtimeBridge
         channel="rt-catalog-items"
         table="catalog_items"
+        filter={`dog_id=eq.${dogId}`}
         devLabel="Catalog"
       />
     </main>
