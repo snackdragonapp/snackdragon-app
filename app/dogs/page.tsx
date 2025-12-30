@@ -1,10 +1,12 @@
 // app/dogs/page.tsx
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import AppNav from '@/components/AppNav';
 import Alert from '@/components/primitives/Alert';
 import DataList from '@/components/primitives/DataList';
 import DogListRow from '@/components/DogListRow';
 import { safeNextPath } from '@/lib/safeNext';
+import { resolveDogId } from '@/lib/dogs';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +35,21 @@ export default async function DogsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
+  // Pick a dogId for AppNav on this non-dog-scoped page:
+  // 1) Prefer the dogId from `next` so we preserve context.
+  // 2) Fallback to the user's default dog (oldest active).
+  const candidateDogId = extractDogIdFromPath(next);
+  let navDogId: string | null = null;
+  try {
+    navDogId = await resolveDogId(supabase, candidateDogId);
+  } catch {
+    try {
+      navDogId = await resolveDogId(supabase, null);
+    } catch {
+      navDogId = null;
+    }
+  }
+
   const { data: activeDogs } = await supabase
     .from('dogs')
     .select('id,name,created_at,archived_at')
@@ -53,66 +70,48 @@ export default async function DogsPage({
   const toggleHref = toggleQs.toString() ? `/dogs?${toggleQs.toString()}` : '/dogs';
 
   return (
-    <main className="mx-auto max-w-2xl p-6 space-y-6 font-sans bg-canvas">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Dogs</h1>
+    <>
+      {navDogId ? <AppNav dogId={navDogId} /> : null}
 
-        <div className="flex items-center gap-2">
-          <Link
-            href={toggleHref}
-            className="rounded border px-2 py-1 text-sm hover:bg-control-hover"
-            title={showArchived ? 'Hide archived dogs' : 'Show archived dogs'}
-          >
-            {showArchived ? 'Hide archived' : 'Show archived'}
-          </Link>
+      <main className="mx-auto max-w-2xl p-6 space-y-6 font-sans bg-canvas">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Dogs</h1>
 
-          {next ? (
+          <div className="flex items-center gap-2">
             <Link
-              href={next}
+              href={toggleHref}
               className="rounded border px-2 py-1 text-sm hover:bg-control-hover"
-              title="Back to day"
+              title={showArchived ? 'Hide archived dogs' : 'Show archived dogs'}
             >
-              ‹ Back to day
+              {showArchived ? 'Hide archived' : 'Show archived'}
             </Link>
-          ) : null}
+
+            {next ? (
+              <Link
+                href={next}
+                className="rounded border px-2 py-1 text-sm hover:bg-control-hover"
+                title="Back to day"
+              >
+                ‹ Back to day
+              </Link>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      {error ? (
-        <Alert tone="error">
-          <span className="font-medium">Error:</span> {error}
-        </Alert>
-      ) : null}
+        {error ? (
+          <Alert tone="error">
+            <span className="font-medium">Error:</span> {error}
+          </Alert>
+        ) : null}
 
-      <section className="space-y-2">
-        <h2 className="font-semibold">Active dogs</h2>
-        <div className="rounded-lg border bg-card p-4">
-          <DataList>
-            {(activeDogs ?? []).length === 0 ? (
-              <li className="py-2 text-sm text-muted-foreground">No active dogs found.</li>
-            ) : (
-              (activeDogs ?? []).map((d) => (
-                <DogListRow
-                  key={d.id}
-                  dog={d}
-                  next={next}
-                  showArchived={showArchived}
-                />
-              ))
-            )}
-          </DataList>
-        </div>
-      </section>
-
-      {showArchived ? (
         <section className="space-y-2">
-          <h2 className="font-semibold">Archived dogs</h2>
+          <h2 className="font-semibold">Active dogs</h2>
           <div className="rounded-lg border bg-card p-4">
             <DataList>
-              {(archivedDogs ?? []).length === 0 ? (
-                <li className="py-2 text-sm text-muted-foreground">No archived dogs.</li>
+              {(activeDogs ?? []).length === 0 ? (
+                <li className="py-2 text-sm text-muted-foreground">No active dogs found.</li>
               ) : (
-                (archivedDogs ?? []).map((d) => (
+                (activeDogs ?? []).map((d) => (
                   <DogListRow
                     key={d.id}
                     dog={d}
@@ -124,7 +123,42 @@ export default async function DogsPage({
             </DataList>
           </div>
         </section>
-      ) : null}
-    </main>
+
+        {showArchived ? (
+          <section className="space-y-2">
+            <h2 className="font-semibold">Archived dogs</h2>
+            <div className="rounded-lg border bg-card p-4">
+              <DataList>
+                {(archivedDogs ?? []).length === 0 ? (
+                  <li className="py-2 text-sm text-muted-foreground">No archived dogs.</li>
+                ) : (
+                  (archivedDogs ?? []).map((d) => (
+                    <DogListRow
+                      key={d.id}
+                      dog={d}
+                      next={next}
+                      showArchived={showArchived}
+                    />
+                  ))
+                )}
+              </DataList>
+            </div>
+          </section>
+        ) : null}
+      </main>
+    </>
   );
+}
+
+function extractDogIdFromPath(path: string | null): string | null {
+  if (!path) return null;
+  try {
+    // Handles cases where callers accidentally pass a full URL-ish string.
+    const u = new URL(path, 'http://local');
+    const m = /^\/dog\/([^/]+)\//.exec(u.pathname);
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch {
+    const m = /^\/dog\/([^/]+)\//.exec(path);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
 }
