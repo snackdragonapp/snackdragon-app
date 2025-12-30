@@ -1,4 +1,4 @@
-// app/catalog/actions.ts
+// app/dog/[dogId]/catalog/actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -92,7 +92,7 @@ export async function createCatalogItemAction(formData: FormData) {
   }
 
   // Default behavior: stay on catalog
-  revalidatePath('/catalog');
+  revalidatePath('/dog/[dogId]/catalog');
   revalidatePath('/'); // optional; ok to keep
 }
 
@@ -125,7 +125,7 @@ export async function updateCatalogItemAction(formData: FormData) {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
-  revalidatePath('/catalog');
+  revalidatePath('/dog/[dogId]/catalog');
   revalidatePath('/dog/[dogId]/day/[ymd]');
   revalidatePath('/');
 }
@@ -140,7 +140,7 @@ export async function deleteCatalogItemAction(formData: FormData) {
 
   const { error } = await supabase.from('catalog_items').delete().eq('id', id);
   if (error) throw new Error(error.message);
-  revalidatePath('/catalog');
+  revalidatePath('/dog/[dogId]/catalog');
   revalidatePath('/dog/[dogId]/day/[ymd]');
   revalidatePath('/');
 }

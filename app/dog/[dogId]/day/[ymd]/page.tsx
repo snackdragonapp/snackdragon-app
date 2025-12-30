@@ -173,7 +173,7 @@ export default async function DayPage({
             <div className="mt-2 text-sm text-muted-foreground">
               <Link
                 href={{
-                  pathname: '/catalog',
+                  pathname: dogHref(dogId, '/catalog'),
                   query: { next: dogHref(dogId, `/day/${selectedYMD}`) },
                 }}
                 className="underline"

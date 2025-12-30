@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import RefreshOnActionComplete from '@/components/RefreshOnActionComplete';
 import ListRow from '@/components/primitives/ListRow';
 import DeleteButton from '@/components/primitives/DeleteButton';
-import { deleteCatalogItemAction } from '@/app/catalog/actions';
+import { deleteCatalogItemAction } from '@/app/dog/[dogId]/catalog/actions';
 import { useFormStatus } from 'react-dom';
 import {
   CatalogItemFields,
@@ -41,10 +41,12 @@ function initialLabelQtyForUnit(unit: string): number {
 export default function CatalogRow({
   item,
   updateAction,
+  dogId,
 }: {
   item: Item;
   // Server Action passed down from the Server Component (page)
   updateAction: (formData: FormData) => Promise<void>;
+  dogId: string;
 }) {
   const [editing, setEditing] = useState(false);
   const defaultQty = Number(item.default_qty ?? 0);
@@ -59,6 +61,7 @@ export default function CatalogRow({
         <EditRow
           item={item}
           updateAction={updateAction}
+          dogId={dogId}
           onDone={() => setEditing(false)}
           onCancel={() => setEditing(false)}
         />
@@ -69,6 +72,7 @@ export default function CatalogRow({
   return (
     <ViewRow
       item={item}
+      dogId={dogId}
       approxKcal={approxKcal}
       onEdit={() => setEditing(true)}
     />
@@ -79,10 +83,12 @@ export default function CatalogRow({
 
 function ViewRow({
   item,
+  dogId,
   approxKcal,
   onEdit,
 }: {
   item: Item;
+  dogId: string;
   approxKcal: string;
   onEdit: () => void;
 }) {
@@ -136,7 +142,7 @@ function ViewRow({
           </button>
           <DeleteButton
             formAction={deleteCatalogItemAction}
-            hidden={{ id: item.id }}
+            hidden={{ id: item.id, dog_id: dogId }}
             title="Delete item"
             aria-label="Delete item"
             confirmMessage="Delete this catalog item? (Past entries remain unchanged)"
@@ -188,11 +194,13 @@ function buildInitialFields(item: Item): CatalogItemFieldsProps {
 function EditRow({
   item,
   updateAction,
+  dogId,
   onDone,
   onCancel,
 }: {
   item: Item;
   updateAction: (formData: FormData) => Promise<void>;
+  dogId: string;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -217,6 +225,7 @@ function EditRow({
       }}
     >
       <input type="hidden" name="id" value={item.id} />
+      <input type="hidden" name="dog_id" value={dogId} />
 
       <CatalogItemFields
        {...initialFields}

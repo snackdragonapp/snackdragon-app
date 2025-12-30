@@ -250,9 +250,11 @@ function ResetOnSubmit({ onComplete }: { onComplete: () => void }) {
 }
 
 export default function CatalogAddForm({
+  dogId,
   next,
   createAction,
 }: {
+  dogId: string;
   next?: string | null;
   createAction: (formData: FormData) => Promise<void>;
 }) {
@@ -268,6 +270,7 @@ export default function CatalogAddForm({
   return (
     <div className="rounded-lg border bg-card p-4">
       <form action={createAction} className="space-y-3">
+        <input type="hidden" name="dog_id" value={dogId} />
         {next ? <input type="hidden" name="next" value={next} /> : null}
 
         <CatalogItemFields

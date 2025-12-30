@@ -1,7 +1,8 @@
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
+import { dogHref } from '@/lib/dogHref';
 import { createCatalogItemAction, updateCatalogItemAction } from './actions';
 import CatalogAddForm from '@/components/CatalogAddForm';
 import CatalogRow from '@/components/CatalogRow';
@@ -11,24 +12,36 @@ import { safeNextPath } from '@/lib/safeNext';
 export const dynamic = 'force-dynamic';
 
 export default async function CatalogPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ dogId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { dogId: dogIdParam } = await params;
+
   const sp = await searchParams;
   // Safety: only allow relative paths
   const next = safeNextPath(sp.next);
 
   const supabase = await createClient();
 
-  // Auth gate: anonymous → /login?next=/catalog
+  // Auth gate: anonymous → /login?next=/dog/<dogId>/catalog
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    const requested = next ? `/catalog?next=${encodeURIComponent(next)}` : '/catalog';
+    const requested = next
+      ? `${dogHref(dogIdParam, '/catalog')}?next=${encodeURIComponent(next)}`
+      : dogHref(dogIdParam, '/catalog');
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  const dogId = await resolveDogId(supabase);
+  // Validate dog context from URL
+  let dogId: string;
+  try {
+    dogId = await resolveDogId(supabase, dogIdParam);
+  } catch {
+    notFound();
+  }
 
   const { data: items } = await supabase
     .from('catalog_items')
@@ -48,7 +61,7 @@ export default async function CatalogPage({
       {/* Add item */}
       <section className="space-y-2">
         <h2 className="font-semibold">Add item</h2>
-        <CatalogAddForm next={next} createAction={createCatalogItemAction} />
+        <CatalogAddForm dogId={dogId} next={next} createAction={createCatalogItemAction} />
       </section>
 
       {/* Your items */}
@@ -62,7 +75,7 @@ export default async function CatalogPage({
           ) : (
             <ul className="divide-y">
               {(items ?? []).map((it) => (
-                <CatalogRow key={it.id} item={it} updateAction={updateCatalogItemAction} />
+                <CatalogRow key={it.id} dogId={dogId} item={it} updateAction={updateCatalogItemAction} />
               ))}
             </ul>
           )}
