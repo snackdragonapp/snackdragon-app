@@ -211,10 +211,10 @@ export async function updateEntryQtyAction(formData: FormData) {
 export async function reorderEntriesAction(input: {
   date: string;
   ids: string[];
-  dog_id?: string;
+  dog_id: string;
   client_op_id?: string;
 }) {
- const supabase = await createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Must be signed in');
 
