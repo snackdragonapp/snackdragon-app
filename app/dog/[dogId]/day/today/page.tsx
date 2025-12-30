@@ -1,7 +1,11 @@
-// app/day/today/page.tsx
+// app/dog/[dogId]/day/today/page.tsx
 import Script from 'next/script';
 import Alert from '@/components/primitives/Alert';
 import TodayClientRedirect from './TodayClientRedirect';
+import { dogHref } from '@/lib/dogHref';
+import { createClient } from '@/lib/supabase/server';
+import { resolveDogId } from '@/lib/dogs';
+import { notFound } from 'next/navigation';
 
 function SkeletonChip({ w = 'sd-sk-w-20' }: { w?: string }) {
   return <div className={`sd-sk-chip ${w}`} />;
@@ -22,11 +26,35 @@ function SkeletonRow() {
   );
 }
 
-export default function TodayPage() {
+export default async function TodayPage({
+  params,
+}: {
+  params: Promise<{ dogId: string }>;
+}) {
+  const { dogId } = await params;
+
+  // Validate dog context when signed in (404 if not owned / does not exist).
+  // If not signed in, we allow the client to resolve ymd and then the day page will auth-gate.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    try {
+      await resolveDogId(supabase, dogId);
+    } catch {
+      notFound();
+    }
+  }
+
+  // Prefix used by both the beforeInteractive script and the client redirect.
+  const dayPrefix = dogHref(dogId, '/day/');
+
   return (
     <main className="sd-today">
       {/* Client-side navigations don't rerun beforeInteractive scripts. */}
-      <TodayClientRedirect />
+      <TodayClientRedirect dogId={dogId} />
 
       {/* Tiny critical CSS so the skeleton respects light/dark even before Tailwind loads. */}
       <style>{`
@@ -86,7 +114,8 @@ export default function TodayPage() {
     var day = String(d.getDate()).padStart(2, '0');
     var ymd = y + '-' + m + '-' + day;
 
-    window.location.replace('/day/' + ymd);
+    var base = ${JSON.stringify(dayPrefix)};
+    window.location.replace(base + ymd);
   } catch (e) {
     var sk = document.getElementById('today-skeleton');
     if (sk) sk.style.display = 'none';
@@ -130,7 +159,10 @@ export default function TodayPage() {
               <SkeletonChip w="sd-sk-w-16" />
               <SkeletonChip w="sd-sk-w-28" />
             </div>
-            <div className="sd-sk-line sd-sk-w-32 sd-sk-subline" style={{ marginTop: '.75rem' }} />
+            <div
+              className="sd-sk-line sd-sk-w-32 sd-sk-subline"
+              style={{ marginTop: '.75rem' }}
+            />
           </div>
         </section>
 

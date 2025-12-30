@@ -7,7 +7,6 @@ import icon from "./icon.png";
 import "./globals.css";
 import { createClient } from '@/lib/supabase/server';
 import { logoutAction } from './auth-actions';
-import AppNav from '@/components/AppNav';
 import ClientAuthSync from '@/components/auth/ClientAuthSync';
 import ToastViewport from '@/components/primitives/Toast';
 export const dynamic = 'force-dynamic';
@@ -87,9 +86,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               )}
             </div>
           </div>
-
-          {/* NEW: app-level nav, only when authenticated */}
-          {user ? <AppNav /> : null}
         </header>
 
         <main className="flex-1">{children}</main>

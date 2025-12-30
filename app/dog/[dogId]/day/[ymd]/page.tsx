@@ -1,8 +1,9 @@
-// app/day/[ymd]/page.tsx
-import { redirect } from 'next/navigation';
+// app/dog/[dogId]/day/[ymd]/page.tsx
+import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
+import { dogHref } from '@/lib/dogHref';
 import {
   isValidYMD,
   addDaysYMD,
@@ -15,27 +16,43 @@ import DayEntriesRealtime from '@/components/realtime/DayEntriesRealtime';
 import PendingOpsDebug from '@/components/realtime/PendingOpsDebug';
 import { expectNoError } from '@/lib/supabase/expect';
 
-export default async function DayPage({ params }: { params: Promise<{ ymd: string }> }) {
-  const { ymd } = await params;
+export default async function DayPage({
+  params,
+}: {
+  params: Promise<{ dogId: string; ymd: string }>;
+}) {
+  const { dogId: dogIdParam, ymd } = await params;
 
   const supabase = await createClient();
 
-  // Resolve the literal date from the path. If invalid, go through /day/today,
+  // Resolve the literal date from the path. If invalid, go through /dog/<dogId>/day/today,
   // which determines "today" in the browser's current timezone.
   if (!isValidYMD(ymd)) {
-    redirect('/day/today');
+    redirect(dogHref(dogIdParam, '/day/today'));
   }
   const selectedYMD = ymd;
 
   const friendly = formatYMDLong(selectedYMD);
 
-  // Auth gate: anonymous → /login?next=/day/<ymd>
-  const { data: { user } } = await supabase.auth.getUser();
+  // Auth gate: anonymous → /login?next=/dog/<dogId>/day/<ymd>
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
-    redirect(`/login?next=${encodeURIComponent(`/day/${selectedYMD}`)}`);
+    redirect(
+      `/login?next=${encodeURIComponent(
+        dogHref(dogIdParam, `/day/${selectedYMD}`)
+      )}`
+    );
   }
 
-  const dogId = await resolveDogId(supabase);
+  // Validate dog context from params (404 if not owned / does not exist)
+  let dogId: string;
+  try {
+    dogId = await resolveDogId(supabase, dogIdParam);
+  } catch {
+    notFound();
+  }
 
   // Nav dates (pure date math on literal YYYY-MM-DD)
   const prevYMD = addDaysYMD(selectedYMD, -1);
@@ -54,14 +71,13 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
   // Fetch this day's entries
   const entriesResult = await supabase
     .from('entries')
-    .select('id, name, qty, unit, kcal_snapshot, status, created_at, ordering, kcal_per_unit_snapshot')
+    .select(
+      'id, name, qty, unit, kcal_snapshot, status, created_at, ordering, kcal_per_unit_snapshot'
+    )
     .eq('day_id', dayIdStr)
     .order('ordering', { ascending: true });
 
-  const entriesData = expectNoError(
-    entriesResult,
-    `loading entries for day ${dayIdStr}`
-  );
+  const entriesData = expectNoError(entriesResult, `loading entries for day ${dayIdStr}`);
 
   const entries: Array<{
     id: string;
@@ -118,21 +134,21 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
         <h1 className="text-2xl font-bold">{friendly}</h1>
         <nav className="flex items-start gap-2 text-sm">
           <Link
-            href={`/day/${prevYMD}`}
+            href={dogHref(dogId, `/day/${prevYMD}`)}
             className="rounded border px-2 py-1 hover:bg-control-hover"
             title="Previous day"
           >
             ←
           </Link>
           <Link
-            href="/day/today"
+            href={dogHref(dogId, '/day/today')}
             className="rounded border px-2 py-1 hover:bg-control-hover"
             title="Jump to today"
           >
             Today
           </Link>
           <Link
-            href={`/day/${nextYMD}`}
+            href={dogHref(dogId, `/day/${nextYMD}`)}
             className="rounded border px-2 py-1 hover:bg-control-hover"
             title="Next day"
           >
@@ -150,6 +166,7 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
             <CatalogChipPicker
               items={chipItems ?? []}
               selectedYMD={selectedYMD}
+              dogId={dogId}
               addFromCatalogAction={addEntryFromCatalogAction}
               visibleLimit={20}
             />
@@ -157,7 +174,7 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
               <Link
                 href={{
                   pathname: '/catalog',
-                  query: { next: `/day/${selectedYMD}` },
+                  query: { next: dogHref(dogId, `/day/${selectedYMD}`) },
                 }}
                 className="underline"
               >
@@ -177,6 +194,7 @@ export default async function DayPage({ params }: { params: Promise<{ ymd: strin
             entries={entries}
             selectedYMD={selectedYMD}
             activeGoalKcal={activeGoalKcal}
+            dogId={dogId}
           />
         </div>
       </section>

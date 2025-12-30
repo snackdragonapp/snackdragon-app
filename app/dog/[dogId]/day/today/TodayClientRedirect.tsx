@@ -1,8 +1,9 @@
-// app/day/today/TodayClientRedirect.tsx
+// app/dog/[dogId]/day/today/TodayClientRedirect.tsx
 'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { dogHref } from '@/lib/dogHref';
 
 function localTodayYMD(): string {
   const d = new Date(); // local device time (reflects travel automatically)
@@ -12,7 +13,7 @@ function localTodayYMD(): string {
   return `${y}-${m}-${day}`;
 }
 
-export default function TodayClientRedirect() {
+export default function TodayClientRedirect({ dogId }: { dogId: string }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export default function TodayClientRedirect() {
       if (!ro || !ro.timeZone) throw new Error('timezone-unavailable');
 
       const ymd = localTodayYMD();
-      router.replace(`/day/${ymd}`);
+      router.replace(dogHref(dogId, `/day/${ymd}`));
     } catch (e) {
       // Match the server-injected script behavior: show explicit error (no fallback)
       const sk = document.getElementById('today-skeleton');
@@ -30,7 +31,7 @@ export default function TodayClientRedirect() {
       if (err) err.style.display = 'block';
       console.error('[day/today] timezone required', e);
     }
-  }, [router]);
+  }, [router, dogId]);
 
   return null;
 }

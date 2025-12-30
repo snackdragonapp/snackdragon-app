@@ -25,11 +25,13 @@ type Item = {
 export default function CatalogChipPicker({
   items,
   selectedYMD,
+  dogId,
   addFromCatalogAction,
   visibleLimit = 20,
 }: {
   items: Item[];
   selectedYMD: string;
+  dogId: string;
   addFromCatalogAction: (formData: FormData) => Promise<void>;
   /** How many to show when the search box is empty */
   visibleLimit?: number;
@@ -78,6 +80,7 @@ export default function CatalogChipPicker({
             key={it.id}
             item={it}
             selectedYMD={selectedYMD}
+            dogId={dogId}
             addFromCatalogAction={addFromCatalogAction}
           />
         ))}
@@ -97,10 +100,12 @@ export default function CatalogChipPicker({
 function CatalogChipButton({
   item,
   selectedYMD,
+  dogId,
   addFromCatalogAction,
 }: {
   item: Item;
   selectedYMD: string;
+  dogId: string;
   addFromCatalogAction: (formData: FormData) => Promise<void>;
 }) {
   const onClick = () => {
@@ -163,6 +168,9 @@ function CatalogChipButton({
         fd.set('catalog_item_id', item.id);
         fd.set('client_op_id', opId);
         fd.set('entry_id', entryId);
+
+        // ✅ Phase 6b: plumb dog context from URL → FormData → server action
+        fd.set('dog_id', dogId);
 
         await addFromCatalogAction(fd);
 

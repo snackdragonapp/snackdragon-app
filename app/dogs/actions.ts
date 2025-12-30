@@ -28,7 +28,7 @@ export async function createDogAction(formData: FormData) {
   const rawName = String(formData.get('name') ?? '');
   const name = rawName.trim();
   const rawNext = String(formData.get('next') ?? '');
-  const next = safeNextPath(rawNext) || '/day/today';
+  const next = safeNextPath(rawNext) || '/';
 
   if (!name) {
     const qs = new URLSearchParams();

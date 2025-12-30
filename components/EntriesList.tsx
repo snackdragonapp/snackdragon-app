@@ -179,11 +179,13 @@ export default function EntriesList({
   entries,
   selectedYMD,
   activeGoalKcal,
+  dogId,
 }: {
   entries: Entry[];
   selectedYMD: string;
   /** Optional kcal/day goal for this date (used for the summary line). */
   activeGoalKcal?: number | null;
+  dogId: string;
 }) {
   const [items, setItems] = useState<Entry[]>(sortByOrdering(entries));
   const [saving, setSaving] = useState(false);
@@ -260,6 +262,7 @@ export default function EntriesList({
         date: selectedYMD,
         ids: next.map((e) => e.id),
         client_op_id: opId,
+        dog_id: dogId,
       });
 
       // Clear Saving… immediately on server completion.

@@ -77,7 +77,7 @@ export async function createWeightAction(formData: FormData) {
 
   // Weights affect charts; day pages may show related context later too.
   revalidatePath('/charts');
-  revalidatePath('/day/[ymd]');
+  revalidatePath('/dog/[dogId]/day/[ymd]');
 
   if (intent === 'create_return' && next) {
     revalidatePath(next);
@@ -99,6 +99,6 @@ export async function deleteWeightAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath('/charts');
-  revalidatePath('/day/[ymd]');
+  revalidatePath('/dog/[dogId]/day/[ymd]');
   revalidatePath('/weights');
 }

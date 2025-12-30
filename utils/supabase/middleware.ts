@@ -53,7 +53,7 @@ export async function updateSession(request: NextRequest) {
 
     if (!error && (dogs ?? []).length === 0) {
       const rawNext = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-      const next = safeNextPath(rawNext) ?? '/day/today';
+      const next = safeNextPath(rawNext) ?? '/';
 
       const url = new URL('/setup/dog', request.url);
       url.searchParams.set('next', next);

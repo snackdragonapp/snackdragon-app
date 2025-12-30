@@ -13,7 +13,7 @@ export default async function SetupDogPage({
 }) {
   const sp = await searchParams;
 
-  const next = safeNextPath(sp.next) ?? '/day/today';
+  const next = safeNextPath(sp.next) ?? '/';
   const error = typeof sp.error === 'string' ? sp.error : null;
 
   const supabase = await createClient();
