@@ -1,8 +1,9 @@
-// app/weights/page.tsx
+// app/dog/[dogId]/weights/page.tsx
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
+import { dogHref } from '@/lib/dogHref';
 import WeightAddForm from '@/components/WeightAddForm';
 import DataList from '@/components/primitives/DataList';
 import WeightListRow from '@/components/WeightListRow';
@@ -13,25 +14,37 @@ import { safeNextPath } from '@/lib/safeNext';
 export const dynamic = 'force-dynamic';
 
 export default async function WeightsPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ dogId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { dogId: dogIdParam } = await params;
+
   const sp = await searchParams;
   const next = safeNextPath(sp.next);
 
   const supabase = await createClient();
 
-  // Auth gate: anonymous → /login?next=/weights
+  // Auth gate: anonymous → /login?next=/dog/<dogId>/weights
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    const requested = next ? `/weights?next=${encodeURIComponent(next)}` : '/weights';
+    const requested = next
+      ? `${dogHref(dogIdParam, '/weights')}?next=${encodeURIComponent(next)}`
+      : dogHref(dogIdParam, '/weights');
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  const dogId = await resolveDogId(supabase);
+  // Validate dog context from URL (404 if not owned / does not exist)
+  let dogId: string;
+  try {
+    dogId = await resolveDogId(supabase, dogIdParam);
+  } catch {
+    notFound();
+  }
 
-  // Fetch weights for the user (newest first)
+  // Fetch weights for the dog (newest first)
   const { data: weights } = await supabase
     .from('weights')
     .select('id, measured_at, method, weight_kg, me_kg, me_and_dog_kg, note, created_at')
@@ -55,7 +68,7 @@ export default async function WeightsPage({
       {/* Add weight */}
       <section className="space-y-2">
         <h2 className="font-semibold">Add weight</h2>
-        <WeightAddForm next={next} createAction={createWeightAction} />
+        <WeightAddForm dogId={dogId} next={next} createAction={createWeightAction} />
       </section>
 
       {/* History */}

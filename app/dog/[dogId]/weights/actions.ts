@@ -1,4 +1,4 @@
-// app/weights/actions.ts
+// app/dog/[dogId]/weights/actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -84,7 +84,7 @@ export async function createWeightAction(formData: FormData) {
     redirect(next);
   }
 
-  revalidatePath('/weights');
+  revalidatePath('/dog/[dogId]/weights');
 }
 
 export async function deleteWeightAction(formData: FormData) {
@@ -100,5 +100,5 @@ export async function deleteWeightAction(formData: FormData) {
 
   revalidatePath('/dog/[dogId]/charts');
   revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/weights');
+  revalidatePath('/dog/[dogId]/weights');
 }

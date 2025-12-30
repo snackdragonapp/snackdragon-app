@@ -3,7 +3,7 @@
 
 import ListRow from '@/components/primitives/ListRow';
 import DeleteButton from '@/components/primitives/DeleteButton';
-import { deleteWeightAction } from '@/app/weights/actions';
+import { deleteWeightAction } from '@/app/dog/[dogId]/weights/actions';
 import { formatYMDLong } from '@/lib/dates';
 
 type Weight = {

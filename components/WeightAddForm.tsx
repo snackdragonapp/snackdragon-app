@@ -15,10 +15,12 @@ function localTodayYMD(): string {
 }
 
 export default function WeightAddForm({
+  dogId,
   defaultDate,
   next,
   createAction,
 }: {
+  dogId: string;
   defaultDate?: string;
   next?: string | null;
   createAction: (formData: FormData) => Promise<void>;
@@ -92,6 +94,7 @@ export default function WeightAddForm({
         action={createAction}
         className="grid grid-cols-[1fr_1fr_1fr_1fr] md:grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-2 items-start"
       >
+        <input type="hidden" name="dog_id" value={dogId} />
         {next ? <input type="hidden" name="next" value={next} /> : null}
 
         <div className="col-span-2">
