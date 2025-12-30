@@ -1,7 +1,8 @@
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
+import { dogHref } from '@/lib/dogHref';
 import ChartsClient from '@/components/ChartsClient';
 import RealtimeBridge from '@/components/realtime/RealtimeBridge';
 import { safeNextPath } from '@/lib/safeNext';
@@ -24,23 +25,35 @@ type DailyRow  = {
 };
 
 export default async function ChartsPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ dogId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { dogId: dogIdParam } = await params;
+
   const sp = await searchParams;
   const next = safeNextPath(sp.next);
 
   const supabase = await createClient();
 
-  // Auth gate
+  // Auth gate: anonymous → /login?next=/dog/<dogId>/charts
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    const requested = next ? `/charts?next=${encodeURIComponent(next)}` : '/charts';
+    const requested = next
+      ? `${dogHref(dogIdParam, '/charts')}?next=${encodeURIComponent(next)}`
+      : dogHref(dogIdParam, '/charts');
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  const dogId = await resolveDogId(supabase);
+  // Validate dog context from URL (404 if not owned / does not exist)
+  let dogId: string;
+  try {
+    dogId = await resolveDogId(supabase, dogIdParam);
+  } catch {
+    notFound();
+  }
 
   // Build queries with proper result typing
   const weightsQ = supabase

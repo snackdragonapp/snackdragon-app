@@ -59,7 +59,7 @@ export async function createGoalAction(formData: FormData) {
 
   // Goals affect day summaries and charts.
   revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/charts');
+  revalidatePath('/dog/[dogId]/charts');
 
   if (intent === 'create_return' && next) {
     revalidatePath(next);
@@ -81,6 +81,6 @@ export async function deleteGoalAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/charts');
+  revalidatePath('/dog/[dogId]/charts');
   revalidatePath('/goals');
 }
