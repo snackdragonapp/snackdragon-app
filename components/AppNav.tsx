@@ -41,25 +41,17 @@ export default function AppNav({ dogId }: { dogId: string }) {
   const chartsHref = dogHref(dogId, `/charts?next=${encodeURIComponent(dayHref)}`);
   const dogsHref = `/dogs?next=${encodeURIComponent(dayHref)}`;
 
-  const dogBase = `/dog/${encodeURIComponent(String(dogId ?? '').trim())}`;
+  const dogBase = dogHref(dogId, '/').slice(0, -1);
 
   const isDay = pathname === `${dogBase}/day` || pathname.startsWith(`${dogBase}/day/`);
   const isCatalog =
-    pathname === `${dogBase}/catalog` ||
-    pathname.startsWith(`${dogBase}/catalog/`) ||
-    pathname.startsWith('/catalog');
+    pathname === `${dogBase}/catalog` || pathname.startsWith(`${dogBase}/catalog/`);
   const isWeights =
-    pathname === `${dogBase}/weights` ||
-    pathname.startsWith(`${dogBase}/weights/`) ||
-    pathname.startsWith('/weights');
+    pathname === `${dogBase}/weights` || pathname.startsWith(`${dogBase}/weights/`);
   const isGoals =
-    pathname === `${dogBase}/goals` ||
-    pathname.startsWith(`${dogBase}/goals/`) ||
-    pathname.startsWith('/goals');
+    pathname === `${dogBase}/goals` || pathname.startsWith(`${dogBase}/goals/`);
   const isCharts =
-    pathname === `${dogBase}/charts` ||
-    pathname.startsWith(`${dogBase}/charts/`) ||
-    pathname.startsWith('/charts');
+    pathname === `${dogBase}/charts` || pathname.startsWith(`${dogBase}/charts/`);
   const isDogs = pathname.startsWith('/dogs');
 
   const base =
