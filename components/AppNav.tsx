@@ -37,7 +37,7 @@ export default function AppNav({ dogId }: { dogId: string }) {
 
   const catalogHref = dogHref(dogId, `/catalog?next=${encodeURIComponent(dayHref)}`);
   const weightsHref = `/weights?next=${encodeURIComponent(dayHref)}`;
-  const goalsHref = `/goals?next=${encodeURIComponent(dayHref)}`;
+  const goalsHref = dogHref(dogId, `/goals?next=${encodeURIComponent(dayHref)}`);
   const chartsHref = dogHref(dogId, `/charts?next=${encodeURIComponent(dayHref)}`);
   const dogsHref = `/dogs?next=${encodeURIComponent(dayHref)}`;
 

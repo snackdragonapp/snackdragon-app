@@ -3,7 +3,7 @@
 
 import ListRow from '@/components/primitives/ListRow';
 import DeleteButton from '@/components/primitives/DeleteButton';
-import { deleteGoalAction } from '@/app/goals/actions';
+import { deleteGoalAction } from '@/app/dog/[dogId]/goals/actions';
 import { formatYMDLong } from '@/lib/dates';
 
 type Goal = {

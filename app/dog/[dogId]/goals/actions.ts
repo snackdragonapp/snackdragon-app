@@ -1,4 +1,4 @@
-// app/goals/actions.ts
+// app/dog/[dogId]/goals/actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -66,7 +66,7 @@ export async function createGoalAction(formData: FormData) {
     redirect(next);
   }
 
-  revalidatePath('/goals');
+  revalidatePath('/dog/[dogId]/goals');
 }
 
 export async function deleteGoalAction(formData: FormData) {
@@ -82,5 +82,5 @@ export async function deleteGoalAction(formData: FormData) {
 
   revalidatePath('/dog/[dogId]/day/[ymd]');
   revalidatePath('/dog/[dogId]/charts');
-  revalidatePath('/goals');
+  revalidatePath('/dog/[dogId]/goals');
 }

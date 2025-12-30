@@ -1,8 +1,9 @@
-// app/goals/page.tsx
+// app/dog/[dogId]/goals/page.tsx
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
+import { dogHref } from '@/lib/dogHref';
 import { addDaysYMD } from '@/lib/dates';
 import { createGoalAction } from './actions';
 import GoalAddForm from '@/components/GoalAddForm';
@@ -14,10 +15,14 @@ import { safeNextPath } from '@/lib/safeNext';
 export const dynamic = 'force-dynamic';
 
 export default async function GoalsPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ dogId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { dogId: dogIdParam } = await params;
+
   const sp = await searchParams;
   const next = safeNextPath(sp.next);
 
@@ -26,11 +31,19 @@ export default async function GoalsPage({
   // Auth gate
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    const requested = next ? `/goals?next=${encodeURIComponent(next)}` : '/goals';
+    const requested = next
+      ? `${dogHref(dogIdParam, '/goals')}?next=${encodeURIComponent(next)}`
+      : dogHref(dogIdParam, '/goals');
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  const dogId = await resolveDogId(supabase);
+  // Validate dog context from URL (404 if not owned / does not exist)
+  let dogId: string;
+  try {
+    dogId = await resolveDogId(supabase, dogIdParam);
+  } catch {
+    notFound();
+  }
 
   // Load goals, newest start_date first
   const { data: goals } = await supabase
@@ -64,7 +77,7 @@ export default async function GoalsPage({
       {/* Add goal */}
       <section className="space-y-2">
         <h2 className="font-semibold">Add goal</h2>
-        <GoalAddForm next={next} createAction={createGoalAction} />
+        <GoalAddForm dogId={dogId} next={next} createAction={createGoalAction} />
       </section>
 
       {/* List goals */}
