@@ -1,11 +1,13 @@
 // components/DogListRow.tsx
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import ListRow from '@/components/primitives/ListRow';
 import DeleteButton from '@/components/primitives/DeleteButton';
 import Pencil from '@/components/icons/Pencil';
 import { archiveDogAction, renameDogAction, restoreDogAction } from '@/app/dogs/actions';
+import { dogHref } from '@/lib/dogHref';
 
 type Dog = {
   id: string;
@@ -64,6 +66,10 @@ function ViewRow({
   showArchived: boolean;
   onEdit: () => void;
 }) {
+  const openBtn =
+    'inline-flex h-11 px-3 md:h-7 items-center justify-center rounded border text-sm whitespace-nowrap ' +
+    'hover:bg-control-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
+
   const editBtn =
     'inline-flex h-11 w-11 md:h-7 md:w-7 items-center justify-center rounded ' +
     'hover:bg-control-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
@@ -81,6 +87,15 @@ function ViewRow({
       }
       actions={
         <div className="flex items-center gap-1">
+          <Link
+            href={dogHref(dog.id, '/day/today')}
+            className={openBtn}
+            title="Open dog"
+            aria-label="Open dog"
+          >
+            Open
+          </Link>
+
           <button
             type="button"
             onClick={onEdit}

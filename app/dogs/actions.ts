@@ -19,6 +19,13 @@ function dogsUrl(
   return s ? `/dogs?${s}` : '/dogs';
 }
 
+function withErrorParam(path: string, errorMessage: string) {
+  const u = new URL(path, 'http://local');
+  u.searchParams.set('error', errorMessage);
+  const s = u.searchParams.toString();
+  return s ? `${u.pathname}?${s}` : u.pathname;
+}
+
 export async function createDogAction(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -28,14 +35,27 @@ export async function createDogAction(formData: FormData) {
 
   const rawName = String(formData.get('name') ?? '');
   const name = rawName.trim();
+
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext) || '/';
 
-  if (!name) {
+  // Optional: when provided (e.g. from /dogs), errors should redirect back there
+  // instead of the setup page.
+  const rawErrorTo = String(formData.get('error_to') ?? '');
+  const errorTo = safeNextPath(rawErrorTo);
+
+  const redirectWithError = (message: string) => {
+    if (errorTo) {
+      redirect(withErrorParam(errorTo, message));
+    }
     const qs = new URLSearchParams();
-    qs.set('error', 'Name is required.');
+    qs.set('error', message);
     qs.set('next', next);
     redirect(`/setup/dog?${qs.toString()}`);
+  };
+
+  if (!name) {
+    redirectWithError('Name is required.');
   }
 
   const { error } = await supabase
@@ -43,14 +63,11 @@ export async function createDogAction(formData: FormData) {
     .insert({ user_id: user.id, name });
 
   if (error) {
-    const qs = new URLSearchParams();
-    qs.set('next', next);
     if (error.code === '23505') {
-      qs.set('error', 'You already have a dog with that name.');
+      redirectWithError('You already have a dog with that name.');
     } else {
-      qs.set('error', error.message);
+      redirectWithError(error.message);
     }
-    redirect(`/setup/dog?${qs.toString()}`);
   }
 
   redirect(next);

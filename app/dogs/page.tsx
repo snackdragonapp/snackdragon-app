@@ -5,6 +5,7 @@ import AppNav from '@/components/AppNav';
 import Alert from '@/components/primitives/Alert';
 import DataList from '@/components/primitives/DataList';
 import DogListRow from '@/components/DogListRow';
+import { createDogAction } from '@/app/dogs/actions';
 import { safeNextPath } from '@/lib/safeNext';
 import { resolveDogId } from '@/lib/dogs';
 import { createClient } from '@/lib/supabase/server';
@@ -80,6 +81,12 @@ export default async function DogsPage({
   if (!showArchived) toggleQs.set('show_archived', '1');
   const toggleHref = toggleQs.toString() ? `/dogs?${toggleQs.toString()}` : '/dogs';
 
+  // Canonical "return to this /dogs view" URL (no `error=`).
+  const selfQs = new URLSearchParams();
+  if (next) selfQs.set('next', next);
+  if (showArchived) selfQs.set('show_archived', '1');
+  const selfHref = selfQs.toString() ? `/dogs?${selfQs.toString()}` : '/dogs';
+
   return (
     <>
       {navDogId ? <AppNav dogId={navDogId} /> : null}
@@ -114,6 +121,33 @@ export default async function DogsPage({
             <span className="font-medium">Error:</span> {error}
           </Alert>
         ) : null}
+
+        <section className="space-y-2">
+          <h2 className="font-semibold">Add dog</h2>
+          <div className="rounded-lg border bg-card p-4">
+            <form action={createDogAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <input type="hidden" name="next" value={selfHref} />
+              <input type="hidden" name="error_to" value={selfHref} />
+
+              <div className="flex flex-col flex-1">
+                <label htmlFor="new-dog-name" className="text-xs text-muted-foreground">
+                  Dog name
+                </label>
+                <input
+                  id="new-dog-name"
+                  name="name"
+                  required
+                  className="w-full border rounded px-2 py-1 text-sm"
+                  autoComplete="off"
+                />
+              </div>
+
+              <button type="submit" className="rounded border px-3 py-1 text-sm hover:bg-control-hover">
+                Create
+              </button>
+            </form>
+          </div>
+        </section>
 
         <section className="space-y-2">
           <h2 className="font-semibold">Active dogs</h2>
