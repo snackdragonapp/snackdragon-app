@@ -7,22 +7,34 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { isValidYMD } from '@/lib/dates';
 import { dogHref } from '@/lib/dogHref';
 
-export default function AppNav({ dogId }: { dogId: string }) {
+export default function AppNav({
+  dogId,
+  dogName,
+  dogs,
+}: {
+  dogId: string;
+  dogName?: string | null;
+  dogs?: { id: string; name: string }[] | null;
+}) {
   const pathname = usePathname();
   const search = useSearchParams();
   const searchKey = search.toString();
 
-  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const statsDetailsRef = useRef<HTMLDetailsElement>(null);
+  const dogDetailsRef = useRef<HTMLDetailsElement>(null);
 
-  const closeMenu = useCallback(() => {
-    const el = detailsRef.current;
-    if (el?.open) el.open = false; // closes <details>
+  const closeMenus = useCallback(() => {
+    const stats = statsDetailsRef.current;
+    if (stats?.open) stats.open = false; // closes <details>
+
+    const dog = dogDetailsRef.current;
+    if (dog?.open) dog.open = false; // closes <details>
   }, []);
 
   // Close whenever navigation happens (Link clicks, back/forward, etc.)
   useEffect(() => {
-    closeMenu();
-  }, [pathname, searchKey, closeMenu]);
+    closeMenus();
+  }, [pathname, searchKey, closeMenus]);
 
   const pathYMD = useMemo(() => {
     const m = /^\/dog\/[^/]+\/day\/(\d{4}-\d{2}-\d{2})$/.exec(pathname);
@@ -60,8 +72,7 @@ export default function AppNav({ dogId }: { dogId: string }) {
     pathname === `${dogBase}/catalog` || pathname.startsWith(`${dogBase}/catalog/`);
   const isWeights =
     pathname === `${dogBase}/weights` || pathname.startsWith(`${dogBase}/weights/`);
-  const isGoals =
-    pathname === `${dogBase}/goals` || pathname.startsWith(`${dogBase}/goals/`);
+  const isGoals = pathname === `${dogBase}/goals` || pathname.startsWith(`${dogBase}/goals/`);
   const isCharts =
     pathname === `${dogBase}/charts` || pathname.startsWith(`${dogBase}/charts/`);
 
@@ -81,6 +92,32 @@ export default function AppNav({ dogId }: { dogId: string }) {
   const statsItem =
     'block w-full rounded px-2 py-1 text-left text-sm hover:bg-control-hover ' +
     'focus:outline-none focus:ring-2 focus:ring-control-ring';
+
+  const dogList = Array.isArray(dogs) ? dogs : null;
+
+  const activeDogName = useMemo(() => {
+    if (typeof dogName === 'string' && dogName.trim()) return dogName.trim();
+    const match = dogList?.find((d) => d.id === dogId)?.name;
+    return match ?? 'Dog';
+  }, [dogName, dogList, dogId]);
+
+  const dogSwitchHref = useCallback(
+    (nextDogId: string) => {
+      if (!pathname.startsWith('/dog/')) {
+        return dogHref(nextDogId, '/day/today');
+      }
+
+      const encoded = encodeURIComponent(nextDogId);
+      const replaced = pathname.replace(/^\/dog\/[^/]+/, `/dog/${encoded}`);
+      return searchKey ? `${replaced}?${searchKey}` : replaced;
+    },
+    [pathname, searchKey],
+  );
+
+  const dogSummary =
+    `${base} ` +
+    'list-none cursor-pointer gap-1 ' +
+    '[&::-webkit-details-marker]:hidden';
 
   // Hide the app nav during onboarding/setup flows.
   const inSetup = pathname === '/setup' || pathname.startsWith('/setup/');
@@ -111,7 +148,7 @@ export default function AppNav({ dogId }: { dogId: string }) {
           </li>
 
           <li>
-            <details ref={detailsRef} className="relative">
+            <details ref={statsDetailsRef} className="relative">
               <summary className={statsSummary} aria-label="Open stats menu">
                 <span>Stats</span>
                 <span aria-hidden="true">▾</span>
@@ -122,7 +159,7 @@ export default function AppNav({ dogId }: { dogId: string }) {
                   href={chartsHref}
                   className={`${statsItem} ${isCharts ? active : ''}`}
                   role="menuitem"
-                  onClick={closeMenu}
+                  onClick={closeMenus}
                 >
                   Charts
                 </Link>
@@ -130,7 +167,7 @@ export default function AppNav({ dogId }: { dogId: string }) {
                   href={goalsHref}
                   className={`${statsItem} ${isGoals ? active : ''}`}
                   role="menuitem"
-                  onClick={closeMenu}
+                  onClick={closeMenus}
                 >
                   Goals
                 </Link>
@@ -138,13 +175,40 @@ export default function AppNav({ dogId }: { dogId: string }) {
                   href={weightsHref}
                   className={`${statsItem} ${isWeights ? active : ''}`}
                   role="menuitem"
-                  onClick={closeMenu}
+                  onClick={closeMenus}
                 >
                   Weights
                 </Link>
               </div>
             </details>
           </li>
+
+          {pathname.startsWith('/dog/') && dogList && dogList.length > 0 ? (
+            <li>
+              <details ref={dogDetailsRef} className="relative">
+                <summary className={dogSummary} aria-label="Open dog switcher">
+                  <span className="max-w-[10rem] truncate" title={activeDogName}>
+                    {activeDogName}
+                  </span>
+                  <span aria-hidden="true">▾</span>
+                </summary>
+
+                <div className={statsMenu} role="menu" aria-label="Dog switcher">
+                  {dogList.map((d) => (
+                    <Link
+                      key={d.id}
+                      href={dogSwitchHref(d.id)}
+                      className={`${statsItem} ${d.id === dogId ? active : ''}`}
+                      role="menuitem"
+                      onClick={closeMenus}
+                    >
+                      {d.name}
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            </li>
+          ) : null}
         </ul>
       </div>
     </nav>

@@ -7,22 +7,34 @@ import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { isValidYMD } from '@/lib/dates';
 import { dogHref } from '@/lib/dogHref';
 
-export default function MobileBottomNav({ dogId }: { dogId: string }) {
+export default function MobileBottomNav({
+  dogId,
+  dogName,
+  dogs,
+}: {
+  dogId: string;
+  dogName?: string | null;
+  dogs?: { id: string; name: string }[] | null;
+}) {
   const pathname = usePathname();
   const search = useSearchParams();
   const searchKey = search.toString();
 
   const [statsOpen, setStatsOpen] = useState(false);
-  const sheetId = useId();
+  const [dogOpen, setDogOpen] = useState(false);
 
-  const closeSheet = useCallback(() => {
+  const statsSheetId = useId();
+  const dogSheetId = useId();
+
+  const closeSheets = useCallback(() => {
     setStatsOpen(false);
+    setDogOpen(false);
   }, []);
 
-  // Close the sheet whenever navigation happens (Link clicks, back/forward, etc.)
+  // Close the sheets whenever navigation happens (Link clicks, back/forward, etc.)
   useEffect(() => {
-    closeSheet();
-  }, [pathname, searchKey, closeSheet]);
+    closeSheets();
+  }, [pathname, searchKey, closeSheets]);
 
   const pathYMD = useMemo(() => {
     const m = /^\/dog\/[^/]+\/day\/(\d{4}-\d{2}-\d{2})$/.exec(pathname);
@@ -60,12 +72,34 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
     pathname === `${dogBase}/catalog` || pathname.startsWith(`${dogBase}/catalog/`);
   const isWeights =
     pathname === `${dogBase}/weights` || pathname.startsWith(`${dogBase}/weights/`);
-  const isGoals =
-    pathname === `${dogBase}/goals` || pathname.startsWith(`${dogBase}/goals/`);
+  const isGoals = pathname === `${dogBase}/goals` || pathname.startsWith(`${dogBase}/goals/`);
   const isCharts =
     pathname === `${dogBase}/charts` || pathname.startsWith(`${dogBase}/charts/`);
 
   const isStats = isWeights || isGoals || isCharts;
+
+  const dogList = Array.isArray(dogs) ? dogs : null;
+
+  const activeDogName = useMemo(() => {
+    if (typeof dogName === 'string' && dogName.trim()) return dogName.trim();
+    const match = dogList?.find((d) => d.id === dogId)?.name;
+    return match ?? 'Dog';
+  }, [dogName, dogList, dogId]);
+
+  const showDogSwitcher = pathname.startsWith('/dog/') && !!dogList && dogList.length > 0;
+
+  const dogSwitchHref = useCallback(
+    (nextDogId: string) => {
+      if (!pathname.startsWith('/dog/')) {
+        return dogHref(nextDogId, '/day/today');
+      }
+
+      const encoded = encodeURIComponent(nextDogId);
+      const replaced = pathname.replace(/^\/dog\/[^/]+/, `/dog/${encoded}`);
+      return searchKey ? `${replaced}?${searchKey}` : replaced;
+    },
+    [pathname, searchKey],
+  );
 
   const base =
     'inline-flex w-full items-center justify-center rounded px-3 py-2 text-sm border ' +
@@ -126,12 +160,35 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
                 className={`${base} ${isStats ? active : ''}`}
                 aria-haspopup="dialog"
                 aria-expanded={statsOpen}
-                aria-controls={sheetId}
-                onClick={() => setStatsOpen(true)}
+                aria-controls={statsSheetId}
+                onClick={() => {
+                  setStatsOpen(true);
+                  setDogOpen(false);
+                }}
               >
                 Stats
               </button>
             </li>
+
+            {showDogSwitcher ? (
+              <li className="flex-1">
+                <button
+                  type="button"
+                  className={base}
+                  aria-haspopup="dialog"
+                  aria-expanded={dogOpen}
+                  aria-controls={dogSheetId}
+                  onClick={() => {
+                    setDogOpen(true);
+                    setStatsOpen(false);
+                  }}
+                >
+                  <span className="truncate" title={activeDogName}>
+                    {activeDogName}
+                  </span>
+                </button>
+              </li>
+            ) : null}
           </ul>
         </div>
       </nav>
@@ -143,11 +200,11 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
             type="button"
             className="absolute inset-0 bg-black/30"
             aria-label="Close stats menu"
-            onClick={closeSheet}
+            onClick={closeSheets}
           />
 
           <div
-            id={sheetId}
+            id={statsSheetId}
             role="dialog"
             aria-modal="true"
             aria-label="Stats menu"
@@ -156,7 +213,7 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
             <div className="mx-auto max-w-2xl p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <div className="flex items-center justify-between">
                 <div className="font-medium">Stats</div>
-                <button type="button" className={sheetCloseBtn} onClick={closeSheet}>
+                <button type="button" className={sheetCloseBtn} onClick={closeSheets}>
                   Close
                 </button>
               </div>
@@ -166,7 +223,7 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
                   href={chartsHref}
                   className={`${sheetItem} ${isCharts ? active : ''}`}
                   role="menuitem"
-                  onClick={closeSheet}
+                  onClick={closeSheets}
                 >
                   Charts
                 </Link>
@@ -174,7 +231,7 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
                   href={goalsHref}
                   className={`${sheetItem} ${isGoals ? active : ''}`}
                   role="menuitem"
-                  onClick={closeSheet}
+                  onClick={closeSheets}
                 >
                   Goals
                 </Link>
@@ -182,10 +239,53 @@ export default function MobileBottomNav({ dogId }: { dogId: string }) {
                   href={weightsHref}
                   className={`${sheetItem} ${isWeights ? active : ''}`}
                   role="menuitem"
-                  onClick={closeSheet}
+                  onClick={closeSheets}
                 >
                   Weights
                 </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Mobile Dog switcher bottom sheet */}
+      {dogOpen && dogList ? (
+        <div className="sm:hidden fixed inset-0 z-40">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/30"
+            aria-label="Close dog switcher"
+            onClick={closeSheets}
+          />
+
+          <div
+            id={dogSheetId}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Dog switcher"
+            className="absolute bottom-0 left-0 right-0 rounded-t-lg border-t bg-card shadow-lg"
+          >
+            <div className="mx-auto max-w-2xl p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+              <div className="flex items-center justify-between">
+                <div className="font-medium">Dogs</div>
+                <button type="button" className={sheetCloseBtn} onClick={closeSheets}>
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-3" role="menu" aria-label="Dog switcher items">
+                {dogList.map((d) => (
+                  <Link
+                    key={d.id}
+                    href={dogSwitchHref(d.id)}
+                    className={`${sheetItem} ${d.id === dogId ? active : ''}`}
+                    role="menuitem"
+                    onClick={closeSheets}
+                  >
+                    {d.name}
+                  </Link>
+                ))}
               </div>
             </div>
           </div>
