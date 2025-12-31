@@ -1,9 +1,11 @@
+// components/ProfileMenuClient.tsx
 'use client';
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef } from 'react';
 import ConfirmSubmit from '@/components/primitives/ConfirmSubmit';
+import User from '@/components/icons/User';
 
 export default function ProfileMenuClient({
   email,
@@ -44,7 +46,7 @@ export default function ProfileMenuClient({
   return (
     <details ref={detailsRef} className="relative">
       <summary className={summaryBtn} aria-label="Open profile menu">
-        <span aria-hidden="true">👤</span>
+        <User className="h-4 w-4" />
         <span>Profile</span>
       </summary>
 
