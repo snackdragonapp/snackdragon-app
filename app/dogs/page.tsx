@@ -1,7 +1,7 @@
 // app/dogs/page.tsx
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import AppNav from '@/components/AppNav';
+import PrimaryNav from '@/components/PrimaryNav';
 import Alert from '@/components/primitives/Alert';
 import DataList from '@/components/primitives/DataList';
 import DogListRow from '@/components/DogListRow';
@@ -87,9 +87,16 @@ export default async function DogsPage({
   if (showArchived) selfQs.set('show_archived', '1');
   const selfHref = selfQs.toString() ? `/dogs?${selfQs.toString()}` : '/dogs';
 
+  // Prepare nav data if we have a resolved dog context
+  const navDogName =
+    navDogId && activeDogs ? activeDogs.find((d) => d.id === navDogId)?.name : null;
+  const navDogs = activeDogs ? activeDogs.map((d) => ({ id: d.id, name: d.name })) : null;
+
   return (
     <>
-      {navDogId ? <AppNav dogId={navDogId} /> : null}
+      {navDogId ? (
+        <PrimaryNav dogId={navDogId} dogName={navDogName ?? null} dogs={navDogs} />
+      ) : null}
 
       <main className="mx-auto max-w-2xl p-6 space-y-6 font-sans bg-canvas">
         <div className="flex items-center justify-between gap-3">
