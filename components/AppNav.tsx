@@ -39,7 +39,6 @@ export default function AppNav({ dogId }: { dogId: string }) {
   const weightsHref = dogHref(dogId, `/weights?next=${encodeURIComponent(dayHref)}`);
   const goalsHref = dogHref(dogId, `/goals?next=${encodeURIComponent(dayHref)}`);
   const chartsHref = dogHref(dogId, `/charts?next=${encodeURIComponent(dayHref)}`);
-  const dogsHref = `/dogs?next=${encodeURIComponent(dayHref)}`;
 
   const dogBase = dogHref(dogId, '/').slice(0, -1);
 
@@ -52,7 +51,6 @@ export default function AppNav({ dogId }: { dogId: string }) {
     pathname === `${dogBase}/goals` || pathname.startsWith(`${dogBase}/goals/`);
   const isCharts =
     pathname === `${dogBase}/charts` || pathname.startsWith(`${dogBase}/charts/`);
-  const isDogs = pathname.startsWith('/dogs');
 
   const base =
     'rounded px-3 py-1 text-sm border hover:bg-nav-item-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
@@ -109,15 +107,6 @@ export default function AppNav({ dogId }: { dogId: string }) {
               aria-current={isCharts ? 'page' : undefined}
             >
               Charts
-            </Link>
-          </li>
-          <li>
-            <Link
-              href={dogsHref}
-              className={`${base} ${isDogs ? active : ''}`}
-              aria-current={isDogs ? 'page' : undefined}
-            >
-              Dogs
             </Link>
           </li>
         </ul>

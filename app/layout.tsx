@@ -6,9 +6,9 @@ import Image from "next/image";
 import icon from "./icon.png";
 import "./globals.css";
 import { createClient } from '@/lib/supabase/server';
-import { logoutAction } from './auth-actions';
 import ClientAuthSync from '@/components/auth/ClientAuthSync';
 import ToastViewport from '@/components/primitives/Toast';
+import ProfileMenu from '@/components/ProfileMenu';
 export const dynamic = 'force-dynamic';
 
 const geistSans = Geist({
@@ -74,10 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Link>
             <div className="text-sm">
               {user ? (
-                <form action={logoutAction} className="flex items-center gap-3">
-                  <span className="text-muted-foreground">Signed in as {user.email}</span>
-                  <button type="submit" className="rounded border px-2 py-1 hover:bg-control-hover">Logout</button>
-                </form>
+                <ProfileMenu email={user.email ?? ''} />
               ) : (
                 <div className="flex items-center gap-3">
                   <Link className="underline" href="/login">Login</Link>
