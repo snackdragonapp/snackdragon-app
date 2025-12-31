@@ -1,3 +1,4 @@
+// app/dogs/actions.ts
 'use server';
 
 import { redirect } from 'next/navigation';
@@ -44,7 +45,7 @@ export async function createDogAction(formData: FormData) {
   if (error) {
     const qs = new URLSearchParams();
     qs.set('next', next);
-    if ((error as any)?.code === '23505') {
+    if (error.code === '23505') {
       qs.set('error', 'You already have a dog with that name.');
     } else {
       qs.set('error', error.message);
@@ -80,7 +81,7 @@ export async function renameDogAction(formData: FormData) {
   const { error } = await supabase.from('dogs').update({ name }).eq('id', id);
 
   if (error) {
-    if ((error as any)?.code === '23505') {
+    if (error.code === '23505') {
       redirect(dogsUrl(next, showArchived, 'You already have a dog with that name.'));
     }
     redirect(dogsUrl(next, showArchived, error.message));

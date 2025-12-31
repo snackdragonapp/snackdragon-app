@@ -23,12 +23,12 @@ export default function DogListRow({
   next: string | null;
   showArchived?: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
+
   // Archived rows are view-only + restore.
   if (dog.archived_at) {
     return <ArchivedRow dog={dog} next={next} showArchived={showArchived} />;
   }
-
-  const [editing, setEditing] = useState(false);
 
   if (editing) {
     return (

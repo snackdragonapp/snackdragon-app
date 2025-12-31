@@ -11,6 +11,13 @@ import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
+type DogRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  archived_at: string | null;
+};
+
 export default async function DogsPage({
   searchParams,
 }: {
@@ -54,15 +61,19 @@ export default async function DogsPage({
     .from('dogs')
     .select('id,name,created_at,archived_at')
     .is('archived_at', null)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .returns<DogRow[]>();
 
-  const { data: archivedDogs } = showArchived
-    ? await supabase
-        .from('dogs')
-        .select('id,name,created_at,archived_at')
-        .not('archived_at', 'is', null)
-        .order('archived_at', { ascending: false })
-    : { data: null as any };
+  let archivedDogs: DogRow[] | null = null;
+  if (showArchived) {
+    const { data } = await supabase
+      .from('dogs')
+      .select('id,name,created_at,archived_at')
+      .not('archived_at', 'is', null)
+      .order('archived_at', { ascending: false })
+      .returns<DogRow[]>();
+    archivedDogs = data;
+  }
 
   const toggleQs = new URLSearchParams();
   if (next) toggleQs.set('next', next);
