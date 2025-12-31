@@ -1,5 +1,5 @@
 // app/dog/[dogId]/layout.tsx
-import AppNav from '@/components/AppNav';
+import PrimaryNav from '@/components/PrimaryNav';
 
 export default async function DogLayout({
   children,
@@ -13,7 +13,7 @@ export default async function DogLayout({
 
   return (
     <>
-      <AppNav dogId={dogId} />
+      <PrimaryNav dogId={dogId} />
       {children}
     </>
   );
