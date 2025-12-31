@@ -3,13 +3,26 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { isValidYMD } from '@/lib/dates';
 import { dogHref } from '@/lib/dogHref';
 
 export default function AppNav({ dogId }: { dogId: string }) {
   const pathname = usePathname();
   const search = useSearchParams();
+  const searchKey = search.toString();
+
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  const closeMenu = useCallback(() => {
+    const el = detailsRef.current;
+    if (el?.open) el.open = false; // closes <details>
+  }, []);
+
+  // Close whenever navigation happens (Link clicks, back/forward, etc.)
+  useEffect(() => {
+    closeMenu();
+  }, [pathname, searchKey, closeMenu]);
 
   const pathYMD = useMemo(() => {
     const m = /^\/dog\/[^/]+\/day\/(\d{4}-\d{2}-\d{2})$/.exec(pathname);
@@ -52,9 +65,22 @@ export default function AppNav({ dogId }: { dogId: string }) {
   const isCharts =
     pathname === `${dogBase}/charts` || pathname.startsWith(`${dogBase}/charts/`);
 
+  const isStats = isWeights || isGoals || isCharts;
+
   const base =
-    'rounded px-3 py-1 text-sm border hover:bg-nav-item-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
+    'inline-flex items-center rounded px-3 py-1 text-sm border hover:bg-nav-item-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
   const active = 'bg-nav-item-active font-medium';
+
+  const statsSummary =
+    `${base} ${isStats ? active : ''} ` +
+    'list-none cursor-pointer gap-1 ' +
+    '[&::-webkit-details-marker]:hidden';
+
+  const statsMenu = 'absolute left-0 mt-2 w-44 rounded border bg-card p-2 shadow-md z-20';
+
+  const statsItem =
+    'block w-full rounded px-2 py-1 text-left text-sm hover:bg-control-hover ' +
+    'focus:outline-none focus:ring-2 focus:ring-control-ring';
 
   // Hide the app nav during onboarding/setup flows.
   const inSetup = pathname === '/setup' || pathname.startsWith('/setup/');
@@ -66,15 +92,6 @@ export default function AppNav({ dogId }: { dogId: string }) {
         <ul className="flex items-center gap-2">
           <li>
             <Link
-              href={catalogHref}
-              className={`${base} ${isCatalog ? active : ''}`}
-              aria-current={isCatalog ? 'page' : undefined}
-            >
-              Catalog
-            </Link>
-          </li>
-          <li>
-            <Link
               href={dayHref}
               className={`${base} ${isDay ? active : ''}`}
               aria-current={isDay ? 'page' : undefined}
@@ -82,32 +99,51 @@ export default function AppNav({ dogId }: { dogId: string }) {
               Day
             </Link>
           </li>
+
           <li>
             <Link
-              href={goalsHref}
-              className={`${base} ${isGoals ? active : ''}`}
-              aria-current={isGoals ? 'page' : undefined}
+              href={catalogHref}
+              className={`${base} ${isCatalog ? active : ''}`}
+              aria-current={isCatalog ? 'page' : undefined}
             >
-              Goals
+              Catalog
             </Link>
           </li>
+
           <li>
-            <Link
-              href={weightsHref}
-              className={`${base} ${isWeights ? active : ''}`}
-              aria-current={isWeights ? 'page' : undefined}
-            >
-              Weights
-            </Link>
-          </li>
-          <li>
-            <Link
-              href={chartsHref}
-              className={`${base} ${isCharts ? active : ''}`}
-              aria-current={isCharts ? 'page' : undefined}
-            >
-              Charts
-            </Link>
+            <details ref={detailsRef} className="relative">
+              <summary className={statsSummary} aria-label="Open stats menu">
+                <span>Stats</span>
+                <span aria-hidden="true">▾</span>
+              </summary>
+
+              <div className={statsMenu} role="menu" aria-label="Stats menu">
+                <Link
+                  href={chartsHref}
+                  className={`${statsItem} ${isCharts ? active : ''}`}
+                  role="menuitem"
+                  onClick={closeMenu}
+                >
+                  Charts
+                </Link>
+                <Link
+                  href={goalsHref}
+                  className={`${statsItem} ${isGoals ? active : ''}`}
+                  role="menuitem"
+                  onClick={closeMenu}
+                >
+                  Goals
+                </Link>
+                <Link
+                  href={weightsHref}
+                  className={`${statsItem} ${isWeights ? active : ''}`}
+                  role="menuitem"
+                  onClick={closeMenu}
+                >
+                  Weights
+                </Link>
+              </div>
+            </details>
           </li>
         </ul>
       </div>
