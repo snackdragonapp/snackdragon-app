@@ -7,8 +7,11 @@ const PUBLIC_PATHS = new Set([
   '/signup',
   '/forgot-password',
   '/reset-password',
-  '/setup/dog',
 ]);
+
+function isSetupPath(pathname: string) {
+  return pathname === '/setup' || pathname.startsWith('/setup/');
+}
 
 export async function updateSession(request: NextRequest) {
   // Prepare a response we can attach cookies to
@@ -44,7 +47,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Phase 2 setup gate: signed-in users must have at least one active dog
-  if (user && !PUBLIC_PATHS.has(request.nextUrl.pathname)) {
+  const pathname = request.nextUrl.pathname;
+  if (user && !PUBLIC_PATHS.has(pathname) && !isSetupPath(pathname)) {
     const { data: dogs, error } = await supabase
       .from('dogs')
       .select('id')
@@ -55,7 +59,7 @@ export async function updateSession(request: NextRequest) {
       const rawNext = `${request.nextUrl.pathname}${request.nextUrl.search}`;
       const next = safeNextPath(rawNext) ?? '/';
 
-      const url = new URL('/setup/dog', request.url);
+      const url = new URL('/setup', request.url);
       url.searchParams.set('next', next);
 
       const redirectResponse = NextResponse.redirect(url);

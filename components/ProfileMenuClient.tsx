@@ -21,6 +21,10 @@ export default function ProfileMenuClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
+  const currentPath = searchKey ? `${pathname}?${searchKey}` : pathname;
+
+  // Setup/onboarding flows: hide “shortcut” menu items that jump out of the wizard.
+  const inSetup = pathname === '/setup' || pathname.startsWith('/setup/');
 
   const closeMenu = useCallback(() => {
     const el = detailsRef.current;
@@ -59,16 +63,19 @@ export default function ProfileMenuClient({
           if (!e.defaultPrevented) closeMenu();
         }}
       >
-        <Link
-          href="/dogs"
-          className={menuItem}
-          role="menuitem"
-          onClick={closeMenu}
-        >
-          Dogs
-        </Link>
-
-        <div className="my-1 border-t" />
+        {!inSetup ? (
+          <>
+            <Link
+              href="/dogs"
+              className={menuItem}
+              role="menuitem"
+              onClick={closeMenu}
+            >
+              Dogs
+            </Link>
+            <div className="my-1 border-t" />
+          </>
+        ) : null}
 
         <div className="px-2 py-1">
           <div className="text-[11px] text-muted-foreground">Account</div>
@@ -81,6 +88,7 @@ export default function ProfileMenuClient({
 
         <ConfirmSubmit
           formAction={logoutFromProfileMenu}
+          hidden={{ next: currentPath }}
           confirmMessage="Log out?"
           className={menuItem}
           aria-label="Log out"

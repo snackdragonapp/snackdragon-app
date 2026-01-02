@@ -2,9 +2,9 @@
 import ProfileMenuClient from '@/components/ProfileMenuClient';
 import { logoutAction } from '@/app/auth-actions';
 
-async function logoutFromProfileMenu() {
+async function logoutFromProfileMenu(formData: FormData) {
   'use server';
-  await logoutAction();
+  await logoutAction(formData);
 }
 
 export default function ProfileMenu({ email }: { email: string }) {

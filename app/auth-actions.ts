@@ -57,13 +57,13 @@ export async function loginAction(formData: FormData) {
     .limit(1);
 
   if (!dogsErr && (dogs ?? []).length === 0) {
-    redirect(`/setup/dog?next=${encodeURIComponent(next)}`);
+    redirect(`/setup?next=${encodeURIComponent(next)}`);
   }
 
   redirect(next);
 }
 
-export async function logoutAction() {
+export async function logoutAction(formData?: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut();
   if (error) throw new Error(error.message);
@@ -71,7 +71,9 @@ export async function logoutAction() {
   // 👇 ensures cookies are attached to THIS response before redirect
   await supabase.auth.getUser();
 
-  redirect('/login');
+  const next = safeNextPath(formData?.get('next'));
+  const qs = next ? `?next=${encodeURIComponent(next)}` : '';
+  redirect(`/login${qs}`);
 }
 
 export async function requestPasswordResetAction(formData: FormData) {

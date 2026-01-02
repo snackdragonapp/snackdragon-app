@@ -25,7 +25,7 @@ export default async function Root() {
   if (error) throw error;
 
   if (!dog) {
-    redirect('/setup/dog');
+    redirect('/setup?next=/');
   }
 
   redirect(dogHref(dog.id, '/day/today'));
