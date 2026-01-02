@@ -134,7 +134,6 @@ export default async function DogsPage({
           <div className="rounded-lg border bg-card p-4">
             <form action={createDogAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <input type="hidden" name="next" value={selfHref} />
-              <input type="hidden" name="error_to" value={selfHref} />
 
               <div className="flex flex-col flex-1">
                 <label htmlFor="new-dog-name" className="text-xs text-muted-foreground">

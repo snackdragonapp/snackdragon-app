@@ -33,43 +33,29 @@ export async function createDogAction(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Must be signed in');
 
-  const rawName = String(formData.get('name') ?? '');
-  const name = rawName.trim();
+  const name = String(formData.get('name') ?? '').trim();
 
   const rawNext = String(formData.get('next') ?? '');
-  const next = safeNextPath(rawNext) || '/';
+  const next = safeNextPath(rawNext) || '/dogs';
 
-  // Optional: when provided (e.g. from /dogs), errors should redirect back there
-  // instead of the setup page.
+  // Optional: if provided, errors can redirect somewhere else; otherwise use `next`.
   const rawErrorTo = String(formData.get('error_to') ?? '');
-  const errorTo = safeNextPath(rawErrorTo);
-
-  const redirectWithError = (message: string) => {
-    if (errorTo) {
-      redirect(withErrorParam(errorTo, message));
-    }
-    const qs = new URLSearchParams();
-    qs.set('error', message);
-    qs.set('next', next);
-    redirect(`/setup/dog?${qs.toString()}`);
-  };
+  const errorTo = safeNextPath(rawErrorTo) || next;
 
   if (!name) {
-    redirectWithError('Name is required.');
+    redirect(withErrorParam(errorTo, 'Name is required.'));
   }
 
-  const { error } = await supabase
-    .from('dogs')
-    .insert({ user_id: user.id, name });
+  const { error } = await supabase.from('dogs').insert({ user_id: user.id, name });
 
   if (error) {
     if (error.code === '23505') {
-      redirectWithError('You already have a dog with that name.');
-    } else {
-      redirectWithError(error.message);
+      redirect(withErrorParam(errorTo, 'You already have a dog with that name.'));
     }
+    redirect(withErrorParam(errorTo, error.message));
   }
 
+  revalidatePath('/dogs');
   redirect(next);
 }
 
