@@ -76,22 +76,9 @@ export default function AppNav({
   const isCharts =
     pathname === `${dogBase}/charts` || pathname.startsWith(`${dogBase}/charts/`);
 
-  const isStats = isWeights || isGoals || isCharts;
-
   const base =
     'inline-flex items-center rounded px-3 py-1 text-sm border hover:bg-nav-item-hover focus:outline-none focus:ring-2 focus:ring-control-ring';
   const active = 'bg-nav-item-active font-medium';
-
-  const statsSummary =
-    `${base} ${isStats ? active : ''} ` +
-    'list-none cursor-pointer gap-1 ' +
-    '[&::-webkit-details-marker]:hidden';
-
-  const statsMenu = 'absolute left-0 mt-2 w-44 rounded border bg-card p-2 shadow-md z-20';
-
-  const statsItem =
-    'block w-full rounded px-2 py-1 text-left text-sm hover:bg-control-hover ' +
-    'focus:outline-none focus:ring-2 focus:ring-control-ring';
 
   const dogList = Array.isArray(dogs) ? dogs : null;
 
@@ -118,6 +105,12 @@ export default function AppNav({
     `${base} ` +
     'list-none cursor-pointer gap-1 ' +
     '[&::-webkit-details-marker]:hidden';
+
+  const dogMenu = 'absolute left-0 mt-2 w-44 rounded border bg-card p-2 shadow-md z-20';
+
+  const dogItem =
+    'block w-full rounded px-2 py-1 text-left text-sm hover:bg-control-hover ' +
+    'focus:outline-none focus:ring-2 focus:ring-control-ring';
 
   // Hide the app nav during onboarding/setup flows.
   const inSetup = pathname === '/setup' || pathname.startsWith('/setup/');
@@ -148,39 +141,33 @@ export default function AppNav({
           </li>
 
           <li>
-            <details ref={statsDetailsRef} className="relative">
-              <summary className={statsSummary} aria-label="Open stats menu">
-                <span>Stats</span>
-                <span aria-hidden="true">▾</span>
-              </summary>
+            <Link
+              href={goalsHref}
+              className={`${base} ${isGoals ? active : ''}`}
+              aria-current={isGoals ? 'page' : undefined}
+            >
+              Goals
+            </Link>
+          </li>
 
-              <div className={statsMenu} role="menu" aria-label="Stats menu">
-                <Link
-                  href={chartsHref}
-                  className={`${statsItem} ${isCharts ? active : ''}`}
-                  role="menuitem"
-                  onClick={closeMenus}
-                >
-                  Charts
-                </Link>
-                <Link
-                  href={goalsHref}
-                  className={`${statsItem} ${isGoals ? active : ''}`}
-                  role="menuitem"
-                  onClick={closeMenus}
-                >
-                  Goals
-                </Link>
-                <Link
-                  href={weightsHref}
-                  className={`${statsItem} ${isWeights ? active : ''}`}
-                  role="menuitem"
-                  onClick={closeMenus}
-                >
-                  Weights
-                </Link>
-              </div>
-            </details>
+          <li>
+            <Link
+              href={weightsHref}
+              className={`${base} ${isWeights ? active : ''}`}
+              aria-current={isWeights ? 'page' : undefined}
+            >
+              Weights
+            </Link>
+          </li>
+
+          <li>
+            <Link
+              href={chartsHref}
+              className={`${base} ${isCharts ? active : ''}`}
+              aria-current={isCharts ? 'page' : undefined}
+            >
+              Charts
+            </Link>
           </li>
 
           {pathname.startsWith('/dog/') && dogList && dogList.length > 0 ? (
@@ -193,12 +180,12 @@ export default function AppNav({
                   <span aria-hidden="true">▾</span>
                 </summary>
 
-                <div className={statsMenu} role="menu" aria-label="Dog switcher">
+                <div className={dogMenu} role="menu" aria-label="Dog switcher">
                   {dogList.map((d) => (
                     <Link
                       key={d.id}
                       href={dogSwitchHref(d.id)}
-                      className={`${statsItem} ${d.id === dogId ? active : ''}`}
+                      className={`${dogItem} ${d.id === dogId ? active : ''}`}
                       role="menuitem"
                       onClick={closeMenus}
                     >

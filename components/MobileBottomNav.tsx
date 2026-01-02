@@ -220,14 +220,6 @@ export default function MobileBottomNav({
 
               <div className="mt-3" role="menu" aria-label="Stats menu items">
                 <Link
-                  href={chartsHref}
-                  className={`${sheetItem} ${isCharts ? active : ''}`}
-                  role="menuitem"
-                  onClick={closeSheets}
-                >
-                  Charts
-                </Link>
-                <Link
                   href={goalsHref}
                   className={`${sheetItem} ${isGoals ? active : ''}`}
                   role="menuitem"
@@ -242,6 +234,14 @@ export default function MobileBottomNav({
                   onClick={closeSheets}
                 >
                   Weights
+                </Link>
+                <Link
+                  href={chartsHref}
+                  className={`${sheetItem} ${isCharts ? active : ''}`}
+                  role="menuitem"
+                  onClick={closeSheets}
+                >
+                  Charts
                 </Link>
               </div>
             </div>
