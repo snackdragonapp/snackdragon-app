@@ -59,7 +59,7 @@ export default async function SetupDogPage({
         <div className="rounded-lg border bg-card p-4">
           <div className="flex flex-col">
             <label htmlFor="dog-name" className="text-xs text-muted-foreground">
-              Dog&apos;s name
+              Dog name
             </label>
             <input
               id="dog-name"
