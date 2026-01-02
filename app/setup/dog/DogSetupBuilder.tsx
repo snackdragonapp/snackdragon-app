@@ -20,9 +20,21 @@ export default function DogSetupBuilder(props: {
 
   const inputRef = React.useRef<HTMLInputElement>(null);
 
+  React.useEffect(() => {
+    if (isPending) return;
+
+    const el = inputRef.current;
+    if (!el) return;
+
+    el.focus();
+    el.select();
+  }, [dogs.length, isPending]);
+  
   const hasAnyDog = dogs.length > 0;
 
   function onSubmit(e: React.FormEvent) {
+    if (isPending) return;
+
     e.preventDefault();
     setError(null);
 
@@ -43,7 +55,6 @@ export default function DogSetupBuilder(props: {
 
         setDogs((prev) => [...prev, res.dog]);
         setName('');
-        requestAnimationFrame(() => inputRef.current?.focus());
       })();
     });
   }
@@ -96,10 +107,10 @@ export default function DogSetupBuilder(props: {
                 className="border rounded px-2 py-1"
                 placeholder="e.g., Snapdragon"
                 autoComplete="off"
-                autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={isPending}
+                readOnly={isPending}
+                aria-disabled={isPending}
               />
             </div>
           </div>
