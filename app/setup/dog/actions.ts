@@ -42,5 +42,6 @@ export async function addSetupDogAction(input: {
     return { ok: false, error: error.message };
   }
 
+  // data.name should exist, but fall back to the submitted name for safety
   return { ok: true, dog: { id: data.id, name: data.name ?? name } };
 }
