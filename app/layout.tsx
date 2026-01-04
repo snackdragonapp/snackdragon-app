@@ -61,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 alt="Snack Dragon Logo"
                 width={64}
                 height={64}
-                className="h-16 w-16 shrink-0 rounded-sm object-contain"
+                className="h-12 w-12 shrink-0 rounded-sm object-contain"
               />
               <div className="flex flex-col">
                 <span className="font-semibold text-xl leading-tight sm:leading-none">
