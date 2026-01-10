@@ -137,8 +137,10 @@ export default function RealtimeBridge({
     };
 
     const run = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!mounted || !data.user) {
+      // Use getSession() to avoid a network auth call.
+      // If there is no session, we don't subscribe.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted || !session?.user) {
         return;
       }
 
@@ -146,7 +148,8 @@ export default function RealtimeBridge({
         events && events.length ? events : ['INSERT', 'UPDATE', 'DELETE'];
 
       // Default to user_id filter for all your user-scoped tables.
-      const defaultFilter = `user_id=eq.${data.user.id}`;
+      // If `filter` is provided (including ""), we use it as-is.
+      const defaultFilter = `user_id=eq.${session.user.id}`;
       const effectiveFilter =
         filter === undefined ? defaultFilter : filter; // allow "" to mean "no filter"
 

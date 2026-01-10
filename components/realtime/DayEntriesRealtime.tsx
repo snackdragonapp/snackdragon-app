@@ -171,8 +171,10 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     };
 
     const run = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!mounted || !data.user) {
+      // Use getSession() to avoid a network auth call.
+      // Realtime will only subscribe when we have a valid local session.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted || !session?.user) {
         return;
       }
 
