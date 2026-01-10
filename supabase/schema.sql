@@ -23,6 +23,89 @@ COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
+CREATE OR REPLACE FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid" DEFAULT NULL::"uuid", "p_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user   uuid := auth.uid();
+  v_owner  uuid;
+  v_dog_id uuid;
+
+  v_name   text;
+  v_unit   text;
+  v_kpu    numeric;
+  v_defqty numeric;
+
+  v_qty    numeric;
+  v_kcal   numeric;
+  v_id     uuid;
+begin
+  if v_user is null then
+    raise exception 'unauthenticated' using errcode = '28000';
+  end if;
+
+  if p_status not in ('planned', 'eaten') then
+    raise exception 'invalid status' using errcode = '22023';
+  end if;
+
+  if p_mult is null or p_mult <= 0 then
+    raise exception 'invalid multiplier' using errcode = '22023';
+  end if;
+
+  -- Validate day belongs to caller; also capture the day's dog_id
+  select dg.user_id, d.dog_id
+    into v_owner, v_dog_id
+  from public.days d
+  join public.dogs dg on dg.id = d.dog_id
+  where d.id = p_day_id;
+
+  if v_owner is null or v_owner <> v_user then
+    raise exception 'forbidden: day not owned by caller' using errcode = '42501';
+  end if;
+
+  -- Validate catalog item belongs to the SAME dog as the day (and caller)
+  select ci.name, ci.unit, ci.kcal_per_unit, ci.default_qty
+    into v_name, v_unit, v_kpu, v_defqty
+  from public.catalog_items ci
+  join public.dogs dg on dg.id = ci.dog_id
+  where ci.id = p_catalog_item_id
+    and ci.dog_id = v_dog_id
+    and dg.user_id = v_user;
+
+  if v_name is null then
+    raise exception 'forbidden: catalog item not owned by caller or wrong dog'
+      using errcode = '42501';
+  end if;
+
+  v_qty := v_defqty * p_mult;
+  if v_qty is null or v_qty <= 0 then
+    raise exception 'invalid qty' using errcode = '22023';
+  end if;
+
+  -- Match existing app behavior: round kcal to 2 decimals
+  v_kcal := round((v_qty * v_kpu)::numeric, 2);
+
+  v_id := public.add_entry_with_order(
+    p_day_id,
+    v_name,
+    v_qty,
+    v_unit,
+    v_kcal,
+    p_status,
+    p_catalog_item_id,
+    p_client_op_id,
+    p_id
+  );
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1071,6 +1154,12 @@ GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") TO "service_role";
 
 
 

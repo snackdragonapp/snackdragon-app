@@ -25,12 +25,15 @@ type Item = {
 export default function CatalogChipPicker({
   items,
   selectedYMD,
+  dayId,
   dogId,
   addFromCatalogAction,
   visibleLimit = 20,
 }: {
   items: Item[];
   selectedYMD: string;
+  /** Preferred: day row id for the selected date (Phase 2.1) */
+  dayId: string;
   dogId: string;
   addFromCatalogAction: (formData: FormData) => Promise<void>;
   /** How many to show when the search box is empty */
@@ -80,6 +83,7 @@ export default function CatalogChipPicker({
             key={it.id}
             item={it}
             selectedYMD={selectedYMD}
+            dayId={dayId}
             dogId={dogId}
             addFromCatalogAction={addFromCatalogAction}
           />
@@ -100,11 +104,13 @@ export default function CatalogChipPicker({
 function CatalogChipButton({
   item,
   selectedYMD,
+  dayId,
   dogId,
   addFromCatalogAction,
 }: {
   item: Item;
   selectedYMD: string;
+  dayId: string;
   dogId: string;
   addFromCatalogAction: (formData: FormData) => Promise<void>;
 }) {
@@ -164,12 +170,13 @@ function CatalogChipButton({
       try {
         const fd = new FormData();
         fd.set('date', selectedYMD);
+        fd.set('day_id', dayId); // ✅ Phase 2.1: preferred path (1 RPC)
         fd.set('mult', '1');
         fd.set('catalog_item_id', item.id);
         fd.set('client_op_id', opId);
         fd.set('entry_id', entryId);
 
-        // ✅ Phase 6b: plumb dog context from URL → FormData → server action
+        // Keep dog_id for backward-compat fallback paths
         fd.set('dog_id', dogId);
 
         await addFromCatalogAction(fd);

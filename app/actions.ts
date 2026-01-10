@@ -97,42 +97,13 @@ export async function addEntryFromCatalogAction(formData: FormData) {
   const userId = claimsData?.claims?.sub ?? null;
   if (!userId) throw new Error('Must be signed in');
 
-  // Selected day from the form (chips live on whatever day you’re viewing)
-  const dayDate = String(formData.get('date') ?? '');
-  if (!isValidYMD(dayDate)) throw new Error('Missing or invalid date');
-
-  const itemId = String(formData.get('catalog_item_id') ?? '');
+  const itemId = String(formData.get('catalog_item_id') ?? '').trim();
   const mult = Number(formData.get('mult') ?? '1');
-  const status = (String(formData.get('status') ?? 'planned') === 'eaten') ? 'eaten' : 'planned';
+  const status =
+    String(formData.get('status') ?? 'planned') === 'eaten' ? 'eaten' : 'planned';
+
   if (!itemId) throw new Error('Missing catalog_item_id');
   if (!Number.isFinite(mult) || mult <= 0) throw new Error('Invalid multiplier');
-
-  const dogIdRaw = formData.get('dog_id');
-  const dogId =
-    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
-  const resolvedDogId = await resolveDogId(supabase, dogId);
-
-  // Ensure selected day exists → get day_id
-  const { data: dayId, error: dayErr } = await supabase.rpc('get_or_create_day', {
-    p_dog_id: resolvedDogId,
-    p_date: dayDate,
-  });
-  if (dayErr) throw new Error(dayErr.message);
-
-  // Load item (RLS: only your item is visible)
-  const { data: item, error: itemErr } = await supabase
-    .from('catalog_items')
-    .select('id,name,unit,kcal_per_unit,default_qty')
-    .eq('id', itemId)
-    .eq('dog_id', resolvedDogId)
-    .single();
-
-  if (itemErr) throw new Error(itemErr.message);
-
-  const baseQty = Number(item.default_qty);
-  const perUnit = Number(item.kcal_per_unit);
-  const qty = baseQty * mult;
-  const kcal = Number((qty * perUnit).toFixed(2));
 
   // Prefer client-provided op-id, fall back to server-generated
   const clientOpIdRaw = formData.get('client_op_id');
@@ -148,19 +119,25 @@ export async function addEntryFromCatalogAction(formData: FormData) {
       ? entryIdRaw.trim()
       : crypto.randomUUID();
 
-  // Append at bottom atomically (RPC), then tag with catalog_item_id
-  const { error: insErr } = await supabase.rpc('add_entry_with_order', {
+  // Phase 2.1 preferred path: day_id is provided (1 round trip)
+  const dayIdRaw = formData.get('day_id');
+  const dayId =
+    typeof dayIdRaw === 'string' && dayIdRaw.trim() ? dayIdRaw.trim() : null;
+
+  if (!dayId) {
+    throw new Error('Missing day_id (Phase 2.1 requires day_id in FormData)');
+  }
+
+  const { error: rpcErr } = await supabase.rpc('add_entry_from_catalog', {
     p_day_id: dayId,
-    p_name: item.name,
-    p_qty: qty,
-    p_unit: item.unit,
-    p_kcal: kcal,
+    p_catalog_item_id: itemId,
+    p_mult: mult,
     p_status: status,
-    p_catalog_item_id: item.id,
     p_client_op_id: opId,
     p_id: entryId,
   });
-  if (insErr) throw new Error(insErr.message);
+
+  if (rpcErr) throw new Error(rpcErr.message);
 }
 
 export async function updateEntryQtyAction(formData: FormData) {

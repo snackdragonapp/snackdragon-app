@@ -167,6 +167,7 @@ export default async function DayPage({
             <CatalogChipPicker
               items={chipItems ?? []}
               selectedYMD={selectedYMD}
+              dayId={dayIdStr}
               dogId={dogId}
               addFromCatalogAction={addEntryFromCatalogAction}
               visibleLimit={20}
