@@ -35,10 +35,10 @@ export default async function DayPage({
   const friendly = formatYMDLong(selectedYMD);
 
   // Auth gate: anonymous → /login?next=/dog/<dogId>/day/<ymd>
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
+
+  if (!userId) {
     redirect(
       `/login?next=${encodeURIComponent(
         dogHref(dogIdParam, `/day/${selectedYMD}`)

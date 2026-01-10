@@ -39,8 +39,10 @@ export default async function ChartsPage({
   const supabase = await createClient();
 
   // Auth gate: anonymous → /login?next=/dog/<dogId>/charts
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
+
+  if (!userId) {
     const requested = next
       ? `${dogHref(dogIdParam, '/charts')}?next=${encodeURIComponent(next)}`
       : dogHref(dogIdParam, '/charts');

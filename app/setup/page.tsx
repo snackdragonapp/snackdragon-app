@@ -14,11 +14,10 @@ export default async function SetupIndexPage({
   const next = safeNextPath(sp.next) ?? '/';
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
 
-  if (!user) {
+  if (!userId) {
     const qs = new URLSearchParams();
     qs.set('next', next);
     const requested = `/setup?${qs.toString()}`;

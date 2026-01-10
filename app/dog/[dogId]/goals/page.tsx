@@ -29,8 +29,10 @@ export default async function GoalsPage({
   const supabase = await createClient();
 
   // Auth gate
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
+
+  if (!userId) {
     const requested = next
       ? `${dogHref(dogIdParam, '/goals')}?next=${encodeURIComponent(next)}`
       : dogHref(dogIdParam, '/goals');

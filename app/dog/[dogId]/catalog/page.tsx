@@ -27,8 +27,10 @@ export default async function CatalogPage({
   const supabase = await createClient();
 
   // Auth gate: anonymous → /login?next=/dog/<dogId>/catalog
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
+
+  if (!userId) {
     const requested = next
       ? `${dogHref(dogIdParam, '/catalog')}?next=${encodeURIComponent(next)}`
       : dogHref(dogIdParam, '/catalog');

@@ -33,8 +33,14 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  // ✅ Trusted identity for server-side gating
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
+
+  // ⚠️ Only for tokens (and display info), not for authorization decisions
   const { data: { session } } = await supabase.auth.getSession();
+  const email = session?.user?.email ?? '';
 
   const year = new Date().getFullYear();
 
@@ -48,7 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-dvh flex flex-col">
         {/* Sync server auth state to the browser (and clear on logout) */}
         <ClientAuthSync
-          serverUserId={user?.id ?? null}
+          serverUserId={userId}
           accessToken={session?.access_token ?? null}
           refreshToken={session?.refresh_token ?? null}
         />
@@ -73,8 +79,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </Link>
             <div className="text-sm">
-              {user ? (
-                <ProfileMenu email={user.email ?? ''} />
+              {userId ? (
+                <ProfileMenu email={email} />
               ) : (
                 <div className="flex items-center gap-3">
                   <Link className="underline" href="/login">Login</Link>

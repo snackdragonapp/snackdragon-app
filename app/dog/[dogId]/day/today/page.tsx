@@ -36,11 +36,10 @@ export default async function TodayPage({
   // Validate dog context when signed in (404 if not owned / does not exist).
   // If not signed in, we allow the client to resolve ymd and then the day page will auth-gate.
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
 
-  if (user) {
+  if (userId) {
     try {
       await resolveDogId(supabase, dogId);
     } catch {

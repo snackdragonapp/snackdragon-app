@@ -28,8 +28,10 @@ export default async function WeightsPage({
   const supabase = await createClient();
 
   // Auth gate: anonymous → /login?next=/dog/<dogId>/weights
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { claims } } = await supabase.auth.getClaims();
+  const userId = claims?.sub ?? null;
+
+  if (!userId) {
     const requested = next
       ? `${dogHref(dogIdParam, '/weights')}?next=${encodeURIComponent(next)}`
       : dogHref(dogIdParam, '/weights');
