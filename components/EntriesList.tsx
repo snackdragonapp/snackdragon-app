@@ -46,6 +46,7 @@ import {
   ackOp,
   completeOp,
 } from '@/components/realtime/opRegistry';
+import { toast } from '@/components/primitives/Toast';
 import useStickyBoolean from '@/hooks/useStickyBoolean';
 
 export type Entry = {
@@ -704,7 +705,34 @@ const AutoSaveQtyForm = forwardRef<
         fd.set('qty', String(qty));
         fd.set('client_op_id', opId);
 
-        await updateEntryQtyAction(fd);
+        const res = await updateEntryQtyAction(fd);
+
+        if (!res.ok) {
+          // Clear the pending-op, otherwise “Saving…” can get stuck
+          ackOp(opId);
+
+          // Only rollback if this is still the latest attempted qty write.
+          if (lastOpRef.current === opId) {
+            if (prevGood != null) {
+              onQtyOptimistic(prevGood);
+              setVal(String(prevGood));
+            } else {
+              // fallback: revert to the last prop
+              setVal(initialQty);
+            }
+
+            if (res.code === 'MISSING_PER_UNIT') {
+              toast({
+                tone: 'error',
+                message:
+                  "Couldn't update calories for this entry because its per-unit calories are unknown. Please delete and re-add from catalog (or edit the entry calories).",
+                durationMs: 3500,
+              });
+            }
+          }
+
+          return;
+        }
 
         // Clear Saving… immediately on server completion
         completeOp(opId);

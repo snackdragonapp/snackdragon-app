@@ -140,7 +140,13 @@ export async function addEntryFromCatalogAction(formData: FormData) {
   if (rpcErr) throw new Error(rpcErr.message);
 }
 
-export async function updateEntryQtyAction(formData: FormData) {
+export type UpdateEntryQtyResult =
+  | { ok: true }
+  | { ok: false; code: 'MISSING_PER_UNIT' };
+
+export async function updateEntryQtyAction(
+  formData: FormData
+): Promise<UpdateEntryQtyResult> {
   const supabase = await createClient();
   const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
   if (claimsErr) throw new Error(claimsErr.message);
@@ -152,29 +158,6 @@ export async function updateEntryQtyAction(formData: FormData) {
   if (!entryId) throw new Error('Missing entry_id');
   if (!Number.isFinite(qty) || qty <= 0) throw new Error('Qty must be > 0');
 
-  // Fetch per-unit snapshot (and fall back if missing)
-  const { data: entry, error: selErr } = await supabase
-    .from('entries')
-    .select('id, qty, kcal_snapshot, kcal_per_unit_snapshot')
-    .eq('id', entryId)
-    .maybeSingle();
-
-  if (selErr) throw new Error(selErr.message);
-  if (!entry) throw new Error('Entry not found');
-
-  let perUnit = entry.kcal_per_unit_snapshot as unknown as number | null;
-
-  if (perUnit == null || perUnit === 0) { // Check for 0 too
-    const baseQty = Number(entry.qty) || qty;
-    const baseKcal = Number(entry.kcal_snapshot) || 0;
-    // Only lock it in if we have actual data
-    if (baseKcal > 0 && baseQty > 0) {
-      perUnit = Number((baseKcal / baseQty).toFixed(4));
-    }
-  }
-
-  const newKcal = Number((qty * Number(perUnit)).toFixed(2));
-
   const clientOpIdRaw = formData.get('client_op_id');
   const clientOpId =
     typeof clientOpIdRaw === 'string' && clientOpIdRaw.trim()
@@ -182,17 +165,27 @@ export async function updateEntryQtyAction(formData: FormData) {
       : null;
   const opId = clientOpId ?? newOpId();
 
-  const { error: updErr } = await supabase
-    .from('entries')
-    .update({
-      qty,
-      kcal_snapshot: newKcal,
-      kcal_per_unit_snapshot: perUnit,
-      client_op_id: opId,
-    })
-    .eq('id', entryId);
+  const { error } = await supabase.rpc('update_entry_qty', {
+    p_entry_id: entryId,
+    p_qty: qty,
+    p_client_op_id: opId,
+  });
 
-  if (updErr) throw new Error(updErr.message);
+  if (error) {
+    const code = (error as unknown as { code?: unknown }).code;
+    const msg = String((error as unknown as { message?: unknown }).message ?? '');
+
+    if (
+      code === '22023' &&
+      msg.toLowerCase().includes('cannot compute per-unit snapshot')
+    ) {
+      return { ok: false, code: 'MISSING_PER_UNIT' };
+    }
+
+    throw new Error(error.message);
+  }
+
+  return { ok: true };
 }
 
 export async function reorderEntriesAction(input: {

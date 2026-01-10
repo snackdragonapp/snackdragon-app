@@ -653,6 +653,97 @@ $$;
 ALTER FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user            uuid := auth.uid();
+  v_day             uuid;
+  v_dog_id          uuid;
+  v_catalog_item_id uuid;
+  v_per_unit        numeric(12,4);
+  v_old_qty         numeric;
+  v_old_kcal        numeric;
+  v_ci_per_unit     numeric(12,4);
+begin
+  if v_user is null then
+    raise exception 'unauthenticated' using errcode = '28000';
+  end if;
+
+  if p_qty is null or p_qty <= 0 then
+    raise exception 'invalid qty' using errcode = '22023';
+  end if;
+
+  -- Lock the entry and verify ownership via the parent day + dog
+  select
+    e.day_id,
+    d.dog_id,
+    e.catalog_item_id,
+    e.kcal_per_unit_snapshot,
+    e.qty,
+    e.kcal_snapshot
+  into
+    v_day,
+    v_dog_id,
+    v_catalog_item_id,
+    v_per_unit,
+    v_old_qty,
+    v_old_kcal
+  from public.entries e
+  join public.days d on d.id = e.day_id
+  join public.dogs dg on dg.id = d.dog_id
+  where e.id = p_entry_id and dg.user_id = v_user
+  for update;
+
+  if v_day is null then
+    raise exception 'forbidden: entry not owned by caller'
+      using errcode = '42501';
+  end if;
+
+  -- If snapshot is missing/invalid, try deriving from the row’s stored data
+  if v_per_unit is null or v_per_unit <= 0 then
+    if v_old_kcal is not null and v_old_kcal > 0
+       and v_old_qty is not null and v_old_qty > 0 then
+      v_per_unit := round((v_old_kcal / nullif(v_old_qty, 0))::numeric, 4);
+    end if;
+  end if;
+
+  -- If still unresolved and we have a catalog item, use catalog_items.kcal_per_unit
+  if (v_per_unit is null or v_per_unit <= 0) and v_catalog_item_id is not null then
+    select ci.kcal_per_unit
+      into v_ci_per_unit
+    from public.catalog_items ci
+    join public.dogs dg on dg.id = ci.dog_id
+    where ci.id = v_catalog_item_id
+      and ci.dog_id = v_dog_id
+      and dg.user_id = v_user;
+
+    if v_ci_per_unit is not null and v_ci_per_unit > 0 then
+      v_per_unit := v_ci_per_unit;
+    end if;
+  end if;
+
+  if v_per_unit is null or v_per_unit <= 0 then
+    raise exception 'cannot compute per-unit snapshot'
+      using errcode = '22023';
+  end if;
+
+  update public.entries
+  set qty                    = p_qty,
+      kcal_per_unit_snapshot = v_per_unit,
+      kcal_snapshot          = round((v_per_unit * p_qty)::numeric, 2),
+      client_op_id           = p_client_op_id
+  where id = p_entry_id;
+
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1220,6 +1311,12 @@ GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uui
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") TO "service_role";
 
 
 
