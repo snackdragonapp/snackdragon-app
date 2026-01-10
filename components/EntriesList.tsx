@@ -32,7 +32,9 @@ import {
   updateEntryQtyAction,
   updateEntryQtyAndStatusAction,
   deleteEntryAction,
+  copyPreviousDayEntriesAction,
 } from '@/app/actions';
+import RefreshOnActionComplete from '@/components/RefreshOnActionComplete';
 import DataList from '@/components/primitives/DataList';
 import ListRow from '@/components/primitives/ListRow';
 import Grip from '@/components/icons/Grip';
@@ -357,7 +359,24 @@ export default function EntriesList({
   if (items.length === 0) {
     return (
       <DataList>
-        <li className="py-2 text-sm text-muted-foreground">No entries yet.</li>
+        <li className="py-2 space-y-1">
+          <div className="text-sm text-muted-foreground">No entries yet.</div>
+
+          <form action={copyPreviousDayEntriesAction}>
+            <input type="hidden" name="date" value={selectedYMD} />
+            <input type="hidden" name="dog_id" value={dogId} />
+
+            <button
+              type="submit"
+              className="underline hover:no-underline text-sm text-muted-foreground cursor-pointer"
+              title="Copy all entries from the previous day into this day"
+            >
+              Copy previous day →
+            </button>
+
+            <RefreshOnActionComplete debounceMs={250} />
+          </form>
+        </li>
       </DataList>
     );
   }

@@ -3,7 +3,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
-import { isValidYMD } from '@/lib/dates';
+import { isValidYMD, addDaysYMD } from '@/lib/dates';
 
 // Simple helper: generate a client op-id for this server action call.
 function newOpId(): string {
@@ -248,6 +248,97 @@ export async function reorderEntriesAction(input: {
     p_ids: input.ids,
     p_client_op_id: opId,
   });
-  
+
   if (error) throw new Error(error.message);
+}
+
+export async function copyPreviousDayEntriesAction(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Must be signed in');
+
+  const dayDate = String(formData.get('date') ?? '');
+  if (!isValidYMD(dayDate)) throw new Error('Missing or invalid date');
+
+  const dogIdRaw = formData.get('dog_id');
+  const dogId =
+    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
+  const resolvedDogId = await resolveDogId(supabase, dogId);
+
+  const prevYMD = addDaysYMD(dayDate, -1);
+
+  // Ensure target day exists → get day_id
+  const { data: targetDayId, error: dayErr } = await supabase.rpc('get_or_create_day', {
+    p_dog_id: resolvedDogId,
+    p_date: dayDate,
+  });
+  if (dayErr) throw new Error(dayErr.message);
+  const targetDayIdStr = String(targetDayId);
+
+  // Only copy into an empty day
+  const { data: existing, error: existingErr } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('day_id', targetDayIdStr)
+    .limit(1);
+
+  if (existingErr) throw new Error(existingErr.message);
+  if ((existing ?? []).length > 0) return;
+
+  // Find the previous day row (do NOT create it)
+  const { data: prevDay, error: prevDayErr } = await supabase
+    .from('days')
+    .select('id')
+    .eq('dog_id', resolvedDogId)
+    .eq('date', prevYMD)
+    .maybeSingle();
+
+  if (prevDayErr) throw new Error(prevDayErr.message);
+  if (!prevDay?.id) return;
+
+  // Load previous day's entries in display order
+  const { data: prevEntries, error: prevEntriesErr } = await supabase
+    .from('entries')
+    .select('name, qty, unit, kcal_snapshot, catalog_item_id, ordering')
+    .eq('day_id', prevDay.id)
+    .order('ordering', { ascending: true });
+
+  if (prevEntriesErr) throw new Error(prevEntriesErr.message);
+  if (!prevEntries || prevEntries.length === 0) return;
+
+  const opId = newOpId();
+
+  for (const row of prevEntries) {
+    const name = String((row as { name?: unknown }).name ?? '').trim();
+    const unit = String((row as { unit?: unknown }).unit ?? '').trim();
+    const qty = Number((row as { qty?: unknown }).qty);
+    const kcal = Number((row as { kcal_snapshot?: unknown }).kcal_snapshot);
+
+    if (!name) throw new Error('Invalid entry name');
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error('Invalid entry qty');
+    if (!Number.isFinite(kcal)) throw new Error('Invalid entry kcal');
+
+    const catalogItemIdRaw = (row as { catalog_item_id?: unknown }).catalog_item_id;
+    const catalogItemId =
+      typeof catalogItemIdRaw === 'string' && catalogItemIdRaw.trim()
+        ? catalogItemIdRaw.trim()
+        : null;
+
+    // IMPORTANT: pass p_id to disambiguate the overloaded add_entry_with_order RPC
+    const entryId = crypto.randomUUID();
+
+    const { error: insErr } = await supabase.rpc('add_entry_with_order', {
+      p_day_id: targetDayIdStr,
+      p_name: name,
+      p_qty: qty,
+      p_unit: unit,
+      p_kcal: kcal,
+      p_status: 'planned', // eaten checkbox unchecked
+      p_catalog_item_id: catalogItemId,
+      p_client_op_id: opId,
+      p_id: entryId,
+    });
+
+    if (insErr) throw new Error(insErr.message);
+  }
 }
