@@ -48,8 +48,10 @@ function deriveKcalPerUnit(formData: FormData): number {
 
 export async function createCatalogItemAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const dogIdRaw = formData.get('dog_id');
   const dogId =
@@ -72,7 +74,7 @@ export async function createCatalogItemAction(formData: FormData) {
   const kcalPerUnit = deriveKcalPerUnit(formData);
 
   const { error } = await supabase.from('catalog_items').insert({
-    user_id: user.id,
+    user_id: userId,
     dog_id: resolvedDogId,
     name,
     unit,
@@ -98,8 +100,10 @@ export async function createCatalogItemAction(formData: FormData) {
 
 export async function updateCatalogItemAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const id = String(formData.get('id') ?? '');
   if (!id) throw new Error('Missing id');
@@ -132,8 +136,10 @@ export async function updateCatalogItemAction(formData: FormData) {
 
 export async function deleteCatalogItemAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const id = String(formData.get('id') ?? '');
   if (!id) throw new Error('Missing id');

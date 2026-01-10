@@ -12,8 +12,10 @@ function newOpId(): string {
 
 export async function toggleEntryStatusAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const entryId = String(formData.get('entry_id') ?? '');
   const nextStatus = String(formData.get('next_status') ?? 'planned');
@@ -36,8 +38,10 @@ export async function toggleEntryStatusAction(formData: FormData) {
 
 export async function deleteEntryAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const entryId = String(formData.get('entry_id') ?? '');
   if (!entryId) throw new Error('Missing entry_id');
@@ -58,8 +62,10 @@ export async function deleteEntryAction(formData: FormData) {
 
 export async function updateEntryQtyAndStatusAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const entryId = String(formData.get('entry_id') ?? '');
   const nextStatus = String(formData.get('next_status') ?? 'planned');
@@ -86,8 +92,10 @@ export async function updateEntryQtyAndStatusAction(formData: FormData) {
 
 export async function addEntryFromCatalogAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   // Selected day from the form (chips live on whatever day you’re viewing)
   const dayDate = String(formData.get('date') ?? '');
@@ -157,8 +165,10 @@ export async function addEntryFromCatalogAction(formData: FormData) {
 
 export async function updateEntryQtyAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const entryId = String(formData.get('entry_id') ?? '');
   const qty = Number(formData.get('qty') ?? '0');
@@ -215,8 +225,10 @@ export async function reorderEntriesAction(input: {
   client_op_id?: string;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   if (!isValidYMD(input.date)) throw new Error('Missing or invalid date');
 
@@ -254,8 +266,10 @@ export async function reorderEntriesAction(input: {
 
 export async function copyPreviousDayEntriesAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const dayDate = String(formData.get('date') ?? '');
   if (!isValidYMD(dayDate)) throw new Error('Missing or invalid date');

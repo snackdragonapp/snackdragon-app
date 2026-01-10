@@ -27,8 +27,9 @@ export default async function CatalogPage({
   const supabase = await createClient();
 
   // Auth gate: anonymous → /login?next=/dog/<dogId>/catalog
-  const { data: { claims } } = await supabase.auth.getClaims();
-  const userId = claims?.sub ?? null;
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
 
   if (!userId) {
     const requested = next

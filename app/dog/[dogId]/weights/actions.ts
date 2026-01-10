@@ -25,8 +25,10 @@ function round3(n: number) {
 
 export async function createWeightAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const dogIdRaw = formData.get('dog_id');
   const dogId =
@@ -64,7 +66,7 @@ export async function createWeightAction(formData: FormData) {
   const note = String(formData.get('note') ?? '').trim() || null;
 
   const { error } = await supabase.from('weights').insert({
-    user_id: user.id,
+    user_id: userId,
     dog_id: resolvedDogId,
     measured_at: measuredAt,
     method,
@@ -89,8 +91,10 @@ export async function createWeightAction(formData: FormData) {
 
 export async function deleteWeightAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const id = String(formData.get('id') ?? '');
   if (!id) throw new Error('Missing id');

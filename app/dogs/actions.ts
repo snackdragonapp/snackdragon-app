@@ -28,10 +28,10 @@ function withErrorParam(path: string, errorMessage: string) {
 
 export async function createDogAction(formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const name = String(formData.get('name') ?? '').trim();
 
@@ -46,7 +46,7 @@ export async function createDogAction(formData: FormData) {
     redirect(withErrorParam(errorTo, 'Name is required.'));
   }
 
-  const { error } = await supabase.from('dogs').insert({ user_id: user.id, name });
+  const { error } = await supabase.from('dogs').insert({ user_id: userId, name });
 
   if (error) {
     if (error.code === '23505') {
@@ -61,10 +61,10 @@ export async function createDogAction(formData: FormData) {
 
 export async function renameDogAction(formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);
@@ -96,10 +96,10 @@ export async function renameDogAction(formData: FormData) {
 
 export async function archiveDogAction(formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);
@@ -126,10 +126,10 @@ export async function archiveDogAction(formData: FormData) {
 
 export async function restoreDogAction(formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const rawNext = String(formData.get('next') ?? '');
   const next = safeNextPath(rawNext);

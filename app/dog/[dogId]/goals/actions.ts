@@ -18,8 +18,10 @@ function okInt(n: unknown) {
 
 export async function createGoalAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const dogIdRaw = formData.get('dog_id');
   const dogId =
@@ -46,7 +48,7 @@ export async function createGoalAction(formData: FormData) {
     .from('goals')
     .upsert(
       {
-        user_id: user.id,
+        user_id: userId,
         dog_id: resolvedDogId,
         start_date: startDate,
         kcal_target: kcalTarget,
@@ -71,8 +73,10 @@ export async function createGoalAction(formData: FormData) {
 
 export async function deleteGoalAction(formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Must be signed in');
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
 
   const id = String(formData.get('id') ?? '');
   if (!id) throw new Error('Missing id');

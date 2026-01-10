@@ -20,8 +20,9 @@ export default async function DogLayout({
   const { dogId } = await params;
 
   const supabase = await createClient();
-  const { data: { claims } } = await supabase.auth.getClaims();
-  const userId = claims?.sub ?? null;
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
 
   // These are used only for the dog switcher in the primary nav.
   let activeDogs: { id: string; name: string }[] | null = null;

@@ -35,8 +35,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const supabase = await createClient();
 
   // ✅ Trusted identity for server-side gating
-  const { data: { claims } } = await supabase.auth.getClaims();
-  const userId = claims?.sub ?? null;
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
 
   // ⚠️ Only for tokens (and display info), not for authorization decisions
   const { data: { session } } = await supabase.auth.getSession();

@@ -19,18 +19,18 @@ export async function addSetupDogAction(input: {
   name: string;
 }): Promise<AddSetupDogResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
 
-  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!userId) return { ok: false, error: 'You must be signed in.' };
 
   const name = String(input?.name ?? '').trim();
   if (!name) return { ok: false, error: 'Name is required.' };
 
   const { data, error } = await supabase
     .from('dogs')
-    .insert({ user_id: user.id, name })
+    .insert({ user_id: userId, name })
     .select('id,name')
     .single();
 
