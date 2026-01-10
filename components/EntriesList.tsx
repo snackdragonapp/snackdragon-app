@@ -182,12 +182,15 @@ export default function EntriesList({
   selectedYMD,
   activeGoalKcal,
   dogId,
+  dayId,
 }: {
   entries: Entry[];
   selectedYMD: string;
   /** Optional kcal/day goal for this date (used for the summary line). */
   activeGoalKcal?: number | null;
   dogId: string;
+  /** Preferred (Phase 2.2): day row id for reorder (1 RPC) */
+  dayId: string;
 }) {
   const [items, setItems] = useState<Entry[]>(sortByOrdering(entries));
   const [saving, setSaving] = useState(false);
@@ -261,10 +264,9 @@ export default function EntriesList({
       });
 
       await reorderEntriesAction({
-        date: selectedYMD,
+        day_id: dayId,              // ✅ Phase 2.2 preferred path (1 RPC)
         ids: next.map((e) => e.id),
         client_op_id: opId,
-        dog_id: dogId,
       });
 
       // Clear Saving… immediately on server completion.

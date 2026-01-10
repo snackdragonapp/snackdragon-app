@@ -196,9 +196,8 @@ export async function updateEntryQtyAction(formData: FormData) {
 }
 
 export async function reorderEntriesAction(input: {
-  date: string;
+  day_id: string;
   ids: string[];
-  dog_id: string;
   client_op_id?: string;
 }) {
   const supabase = await createClient();
@@ -207,24 +206,9 @@ export async function reorderEntriesAction(input: {
   const userId = claimsData?.claims?.sub ?? null;
   if (!userId) throw new Error('Must be signed in');
 
-  if (!isValidYMD(input.date)) throw new Error('Missing or invalid date');
-
-  const dogId =
-    typeof input.dog_id === 'string' && input.dog_id.trim() ? input.dog_id.trim() : null;
-  const resolvedDogId = await resolveDogId(supabase, dogId);
-
-  // Get existing day id (don’t silently create a new day if not there)
-  const { data: day } = await supabase
-    .from('days')
-    .select('id')
-    .eq('date', input.date)
-    .eq('dog_id', resolvedDogId)
-    .maybeSingle();
-
-  if (!day) {
-    // nothing to reorder (or stale client); just return
-    return;
-  }
+  const dayId =
+    typeof input.day_id === 'string' && input.day_id.trim() ? input.day_id.trim() : null;
+  if (!dayId) throw new Error('Missing day_id');
 
   const clientOpId =
     typeof input.client_op_id === 'string' && input.client_op_id.trim()
@@ -233,7 +217,7 @@ export async function reorderEntriesAction(input: {
   const opId = clientOpId ?? newOpId();
 
   const { error } = await supabase.rpc('reorder_entries', {
-    p_day_id: day.id,
+    p_day_id: dayId,
     p_ids: input.ids,
     p_client_op_id: opId,
   });

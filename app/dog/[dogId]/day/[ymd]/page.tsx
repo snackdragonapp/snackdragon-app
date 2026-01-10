@@ -197,6 +197,7 @@ export default async function DayPage({
             selectedYMD={selectedYMD}
             activeGoalKcal={activeGoalKcal}
             dogId={dogId}
+            dayId={dayIdStr}
           />
         </div>
       </section>
