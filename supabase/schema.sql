@@ -431,11 +431,21 @@ begin
     raise exception 'forbidden: dog not owned by caller' using errcode = '42501';
   end if;
 
+  -- Insert if missing; avoid write-amplification when the row already exists.
   insert into public.days (user_id, dog_id, date)
   values (v_user, p_dog_id, p_date)
   on conflict (dog_id, date)
-  do update set date = excluded.date
+  do nothing
   returning id into v_day;
+
+  -- If it already existed, fetch the existing id.
+  if v_day is null then
+    select id
+      into v_day
+    from public.days
+    where dog_id = p_dog_id
+      and date = p_date;
+  end if;
 
   return v_day;
 end;
