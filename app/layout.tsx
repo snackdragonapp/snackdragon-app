@@ -38,10 +38,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
   if (claimsErr) throw new Error(claimsErr.message);
   const userId = claimsData?.claims?.sub ?? null;
+  const email =
+    typeof claimsData?.claims?.email === 'string' ? claimsData.claims.email : '';
 
-  // ⚠️ Only for tokens (and display info), not for authorization decisions
-  const { data: { session } } = await supabase.auth.getSession();
-  const email = session?.user?.email ?? '';
+  const { data: { session } } = await supabase.auth.getSession(); // tokens only
 
   const year = new Date().getFullYear();
 

@@ -1,6 +1,7 @@
 // app/dog/[dogId]/layout.tsx
 import PrimaryNav from '@/components/PrimaryNav';
 import { createClient } from '@/lib/supabase/server';
+import { notFound } from 'next/navigation';
 
 type DogRow = {
   id: string;
@@ -29,14 +30,7 @@ export default async function DogLayout({
   let activeDogName: string | null = null;
 
   if (userId) {
-    const { data: dog } = await supabase
-      .from('dogs')
-      .select('id,name')
-      .eq('id', dogId)
-      .maybeSingle();
-
-    activeDogName = dog?.name ?? null;
-
+    // Fetch active dogs list once; validate dogId by membership.
     const { data } = await supabase
       .from('dogs')
       .select('id,name,created_at,archived_at')
@@ -44,12 +38,15 @@ export default async function DogLayout({
       .order('created_at', { ascending: true })
       .returns<DogRow[]>();
 
-    activeDogs = (data ?? []).map((d) => ({ id: d.id, name: d.name }));
+    const rows = data ?? [];
 
-    if (!activeDogName) {
-      const match = activeDogs.find((d) => d.id === dogId);
-      activeDogName = match?.name ?? null;
+    const match = rows.find((d) => d.id === dogId);
+    if (!match) {
+      notFound();
     }
+
+    activeDogName = match.name;
+    activeDogs = rows.map((d) => ({ id: d.id, name: d.name }));
   }
 
   return (
