@@ -63,14 +63,32 @@ export default async function DayPage({
   }
   const dayIdStr = String(dayId);
 
-  // Fetch this day's entries
-  const entriesResult = await supabase
+  // Fetch this day's entries, chip items, and active goal in parallel.
+  const entriesPromise = supabase
     .from('entries')
     .select(
       'id, name, qty, unit, kcal_snapshot, status, created_at, ordering, kcal_per_unit_snapshot'
     )
     .eq('day_id', dayIdStr)
     .order('ordering', { ascending: true });
+
+  const orderedItemsPromise = supabase.rpc('get_catalog_items_usage_order', {
+    p_dog_id: dogId,
+  });
+
+  const goalRowsPromise = supabase
+    .from('goals')
+    .select('start_date,kcal_target')
+    .eq('dog_id', dogId)
+    .lte('start_date', selectedYMD)
+    .order('start_date', { ascending: false })
+    .limit(1);
+
+  const [entriesResult, { data: orderedItems }, { data: goalRows }] = await Promise.all([
+    entriesPromise,
+    orderedItemsPromise,
+    goalRowsPromise,
+  ]);
 
   const entriesData = expectNoError(entriesResult, `loading entries for day ${dayIdStr}`);
 
@@ -106,19 +124,9 @@ export default async function DayPage({
 
   // Ordered by: last used date desc, then first appearance that day asc,
   // then name asc for never-used items.
-  const { data: orderedItems } = await supabase.rpc('get_catalog_items_usage_order', {
-    p_dog_id: dogId,
-  });
   const chipItems = orderedItems ?? []; // let the picker limit what it shows
 
   // Active goal for this day (latest start_date <= selectedYMD)
-  const { data: goalRows } = await supabase
-    .from('goals')
-    .select('start_date,kcal_target')
-    .eq('dog_id', dogId)
-    .lte('start_date', selectedYMD)
-    .order('start_date', { ascending: false })
-    .limit(1);
   const activeGoal = (goalRows ?? [])[0] ?? null;
   const activeGoalKcal = activeGoal ? Number(activeGoal.kcal_target) : null;
 
