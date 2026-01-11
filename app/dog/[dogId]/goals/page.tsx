@@ -1,8 +1,7 @@
 // app/dog/[dogId]/goals/page.tsx
 import Link from 'next/link';
-import { redirect, notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { resolveDogId } from '@/lib/dogs';
 import { dogHref } from '@/lib/dogHref';
 import { addDaysYMD } from '@/lib/dates';
 import { createGoalAction } from './actions';
@@ -40,13 +39,8 @@ export default async function GoalsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  // Validate dog context from URL (404 if not owned / does not exist)
-  let dogId: string;
-  try {
-    dogId = await resolveDogId(supabase, dogIdParam);
-  } catch {
-    notFound();
-  }
+  // DogLayout validates dogId when signed in
+  const dogId = dogIdParam;
 
   // Load goals, newest start_date first
   const { data: goals } = await supabase

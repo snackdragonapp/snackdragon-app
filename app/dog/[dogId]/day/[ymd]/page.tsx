@@ -1,8 +1,7 @@
 // app/dog/[dogId]/day/[ymd]/page.tsx
-import { redirect, notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { resolveDogId } from '@/lib/dogs';
 import { dogHref } from '@/lib/dogHref';
 import {
   isValidYMD,
@@ -47,13 +46,8 @@ export default async function DayPage({
     );
   }
 
-  // Validate dog context from params (404 if not owned / does not exist)
-  let dogId: string;
-  try {
-    dogId = await resolveDogId(supabase, dogIdParam);
-  } catch {
-    notFound();
-  }
+  // DogLayout validates dogId when signed in
+  const dogId = dogIdParam;
 
   // Nav dates (pure date math on literal YYYY-MM-DD)
   const prevYMD = addDaysYMD(selectedYMD, -1);

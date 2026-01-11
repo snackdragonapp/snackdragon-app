@@ -1,7 +1,6 @@
-import { redirect, notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { resolveDogId } from '@/lib/dogs';
 import { dogHref } from '@/lib/dogHref';
 import ChartsClient from '@/components/ChartsClient';
 import RealtimeBridge from '@/components/realtime/RealtimeBridge';
@@ -50,13 +49,8 @@ export default async function ChartsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  // Validate dog context from URL (404 if not owned / does not exist)
-  let dogId: string;
-  try {
-    dogId = await resolveDogId(supabase, dogIdParam);
-  } catch {
-    notFound();
-  }
+  // DogLayout validates dogId when signed in
+  const dogId = dogIdParam;
 
   // Build queries with proper result typing
   const weightsQ = supabase

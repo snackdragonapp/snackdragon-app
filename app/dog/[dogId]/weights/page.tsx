@@ -1,8 +1,7 @@
 // app/dog/[dogId]/weights/page.tsx
 import Link from 'next/link';
-import { redirect, notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { resolveDogId } from '@/lib/dogs';
 import { dogHref } from '@/lib/dogHref';
 import WeightAddForm from '@/components/WeightAddForm';
 import DataList from '@/components/primitives/DataList';
@@ -39,13 +38,8 @@ export default async function WeightsPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  // Validate dog context from URL (404 if not owned / does not exist)
-  let dogId: string;
-  try {
-    dogId = await resolveDogId(supabase, dogIdParam);
-  } catch {
-    notFound();
-  }
+  // DogLayout validates dogId when signed in
+  const dogId = dogIdParam;
 
   // Fetch weights for the dog (newest first)
   const { data: weights } = await supabase

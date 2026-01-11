@@ -1,7 +1,6 @@
-import { redirect, notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { resolveDogId } from '@/lib/dogs';
 import { dogHref } from '@/lib/dogHref';
 import { createCatalogItemAction, updateCatalogItemAction } from './actions';
 import CatalogAddForm from '@/components/CatalogAddForm';
@@ -38,13 +37,8 @@ export default async function CatalogPage({
     redirect(`/login?next=${encodeURIComponent(requested)}`);
   }
 
-  // Validate dog context from URL
-  let dogId: string;
-  try {
-    dogId = await resolveDogId(supabase, dogIdParam);
-  } catch {
-    notFound();
-  }
+  // DogLayout validates dogId when signed in
+  const dogId = dogIdParam;
 
   const { data: items } = await supabase
     .from('catalog_items')
