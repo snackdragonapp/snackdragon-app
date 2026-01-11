@@ -13,6 +13,17 @@ function isSetupPath(pathname: string) {
   return pathname === '/setup' || pathname.startsWith('/setup/');
 }
 
+// Only run the "has active dog" DB check on routes that require a dog context.
+function requiresDogContext(pathname: string) {
+  return (
+    pathname === '/' ||
+    pathname === '/dogs' ||
+    pathname.startsWith('/dogs/') ||
+    pathname === '/dog' ||
+    pathname.startsWith('/dog/')
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   // Prepare a response we can attach cookies to
   const response = NextResponse.next();
@@ -41,14 +52,36 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Trigger refresh if needed; any cookie writes happen on `response`
+  const pathname = request.nextUrl.pathname;
+
+  // Read session (cookie-based) so we can detect when a refresh may be needed.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // Use verified claims for user identity in middleware gating logic.
+  let userId: string | null = null;
+  {
+    const { data: claimsData } = await supabase.auth.getClaims();
+    userId = claimsData?.claims?.sub ?? null;
+  }
+
+  // If a session exists but claims are missing (e.g., expired access token),
+  // trigger a refresh to ensure we don’t treat a refreshable user as logged out.
+  if (!userId && session) {
+    await supabase.auth.getUser();
+
+    const { data: refreshedClaimsData } = await supabase.auth.getClaims();
+    userId = refreshedClaimsData?.claims?.sub ?? null;
+  }
 
   // Phase 2 setup gate: signed-in users must have at least one active dog
-  const pathname = request.nextUrl.pathname;
-  if (user && !PUBLIC_PATHS.has(pathname) && !isSetupPath(pathname)) {
+  if (
+    userId &&
+    requiresDogContext(pathname) &&
+    !PUBLIC_PATHS.has(pathname) &&
+    !isSetupPath(pathname)
+  ) {
     const { data: dogs, error } = await supabase
       .from('dogs')
       .select('id')
