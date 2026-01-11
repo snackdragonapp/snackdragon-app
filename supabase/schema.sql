@@ -1258,121 +1258,101 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."add_entry_from_catalog"("p_day_id" "uuid", "p_catalog_item_id" "uuid", "p_mult" numeric, "p_status" "text", "p_client_op_id" "uuid", "p_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text", "p_catalog_item_id" "uuid", "p_client_op_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text", "p_catalog_item_id" "uuid", "p_client_op_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text", "p_catalog_item_id" "uuid", "p_client_op_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text", "p_catalog_item_id" "uuid", "p_client_op_id" "uuid", "p_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text", "p_catalog_item_id" "uuid", "p_client_op_id" "uuid", "p_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."add_entry_with_order"("p_day_id" "uuid", "p_name" "text", "p_qty" numeric, "p_unit" "text", "p_kcal" numeric, "p_status" "text", "p_catalog_item_id" "uuid", "p_client_op_id" "uuid", "p_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."delete_entry_with_op"("p_entry_id" "uuid", "p_client_op_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."delete_entry_with_op"("p_entry_id" "uuid", "p_client_op_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."delete_entry_with_op"("p_entry_id" "uuid", "p_client_op_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_catalog_items_usage_order"("p_dog_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_daily_kcal_totals"("p_dog_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_or_create_day"("p_dog_id" "uuid", "p_date" "date") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."move_entry"("p_entry_id" "uuid", "p_dir" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."move_entry"("p_entry_id" "uuid", "p_dir" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."move_entry"("p_entry_id" "uuid", "p_dir" "text") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[]) TO "anon";
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[]) TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."reorder_entries"("p_day_id" "uuid", "p_ids" "uuid"[], "p_client_op_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_entry_qty"("p_entry_id" "uuid", "p_qty" numeric, "p_client_op_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text", "p_client_op_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text", "p_client_op_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_entry_qty_and_status"("p_entry_id" "uuid", "p_qty" numeric, "p_next_status" "text", "p_client_op_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."catalog_items" TO "anon";
 GRANT ALL ON TABLE "public"."catalog_items" TO "authenticated";
 GRANT ALL ON TABLE "public"."catalog_items" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."days" TO "anon";
 GRANT ALL ON TABLE "public"."days" TO "authenticated";
 GRANT ALL ON TABLE "public"."days" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."dogs" TO "anon";
 GRANT ALL ON TABLE "public"."dogs" TO "authenticated";
 GRANT ALL ON TABLE "public"."dogs" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."entries" TO "anon";
 GRANT ALL ON TABLE "public"."entries" TO "authenticated";
 GRANT ALL ON TABLE "public"."entries" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."goals" TO "anon";
 GRANT ALL ON TABLE "public"."goals" TO "authenticated";
 GRANT ALL ON TABLE "public"."goals" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."weights" TO "anon";
 GRANT ALL ON TABLE "public"."weights" TO "authenticated";
 GRANT ALL ON TABLE "public"."weights" TO "service_role";
 
