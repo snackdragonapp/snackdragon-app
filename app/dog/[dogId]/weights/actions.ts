@@ -89,6 +89,60 @@ export async function createWeightAction(formData: FormData) {
   revalidatePath('/dog/[dogId]/weights');
 }
 
+export async function updateWeightAction(formData: FormData) {
+  const supabase = await createClient();
+  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
+  if (claimsErr) throw new Error(claimsErr.message);
+  const userId = claimsData?.claims?.sub ?? null;
+  if (!userId) throw new Error('Must be signed in');
+
+  const id = String(formData.get('id') ?? '');
+  if (!id) throw new Error('Missing id');
+
+  const methodRaw = String(formData.get('method') ?? 'vet');
+  const method: 'vet' | 'home_diff' = methodRaw === 'home_diff' ? 'home_diff' : 'vet';
+  const unit = String(formData.get('unit') ?? 'kg');
+
+  const measuredAt = String(formData.get('date') ?? '');
+  if (!isValidYMD(measuredAt)) throw new Error('Missing or invalid date');
+
+  let weightKg: number;
+  let meKg: number | null = null;
+  let meAndDogKg: number | null = null;
+
+  if (method === 'vet') {
+    const w = okNum(formData.get('weight'));
+    weightKg = round3(toKg(w, unit));
+  } else {
+    const me = okNum(formData.get('me'));
+    const both = okNum(formData.get('me_plus_dog'));
+    if (both <= me) throw new Error('You + dog must be greater than You');
+    meKg = round3(toKg(me, unit));
+    meAndDogKg = round3(toKg(both, unit));
+    weightKg = round3(meAndDogKg - meKg);
+  }
+
+  const note = String(formData.get('note') ?? '').trim() || null;
+
+  const { error } = await supabase
+    .from('weights')
+    .update({
+      measured_at: measuredAt,
+      method,
+      weight_kg: weightKg,
+      me_kg: meKg,
+      me_and_dog_kg: meAndDogKg,
+      note,
+    })
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/weights');
+}
+
 export async function deleteWeightAction(formData: FormData) {
   const supabase = await createClient();
   const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();

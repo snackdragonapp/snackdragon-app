@@ -6,7 +6,7 @@ import { dogHref } from '@/lib/dogHref';
 import WeightAddForm from '@/components/WeightAddForm';
 import DataList from '@/components/primitives/DataList';
 import WeightListRow from '@/components/WeightListRow';
-import { createWeightAction } from './actions';
+import { createWeightAction, updateWeightAction } from './actions';
 import RealtimeBridge from '@/components/realtime/RealtimeBridge';
 import { safeNextPath } from '@/lib/safeNext';
 
@@ -79,7 +79,7 @@ export default async function WeightsPage({
           ) : (
             <DataList>
               {weights.map((w) => (
-                <WeightListRow key={w.id} w={w} />
+                <WeightListRow key={w.id} w={w} updateAction={updateWeightAction} />
               ))}
             </DataList>
           )}
