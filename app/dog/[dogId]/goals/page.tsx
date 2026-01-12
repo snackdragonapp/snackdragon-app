@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { dogHref } from '@/lib/dogHref';
 import { addDaysYMD } from '@/lib/dates';
-import { createGoalAction } from './actions';
+import { createGoalAction, updateGoalAction } from './actions';
 import GoalAddForm from '@/components/GoalAddForm';
 import DataList from '@/components/primitives/DataList';
 import GoalListRow from '@/components/GoalListRow';
@@ -88,7 +88,12 @@ export default async function GoalsPage({
           ) : (
             <DataList>
               {rows.map((g, idx) => (
-                <GoalListRow key={g.id} goal={g} current={idx === 0 && !g.end_date} />
+                <GoalListRow
+                  key={g.id}
+                  goal={g}
+                  current={idx === 0 && !g.end_date}
+                  updateAction={updateGoalAction}
+                />
               ))}
             </DataList>
           )}
