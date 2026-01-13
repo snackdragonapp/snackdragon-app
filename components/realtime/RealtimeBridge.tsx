@@ -139,10 +139,19 @@ export default function RealtimeBridge({
     const run = async () => {
       // Use getSession() to avoid a network auth call.
       // If there is no session, we don't subscribe.
-      const { data: { session } } = await supabase.auth.getSession();
+      let { data: { session } } = await supabase.auth.getSession();
       if (!mounted || !session?.user) {
         return;
       }
+
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (!mounted) return;
+
+      if (!refreshError && refreshed.session) {
+        session = refreshed.session;
+      }
+
+      supabase.realtime.setAuth(session.access_token);
 
       const evs: PostgresEvent[] =
         events && events.length ? events : ['INSERT', 'UPDATE', 'DELETE'];
