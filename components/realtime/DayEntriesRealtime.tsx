@@ -171,21 +171,13 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     };
 
     const run = async () => {
-      // Use getSession() to avoid a network auth call.
-      // Realtime will only subscribe when we have a valid local session.
-      let { data: { session } } = await supabase.auth.getSession();
-      if (!mounted || !session?.user) {
+      // Use getUser() to get authoritative user data.
+      // This avoids race conditions with getSession() when the session cache
+      // hasn't been updated yet (e.g., after ClientAuthSync calls setSession()).
+      const { data } = await supabase.auth.getUser();
+      if (!mounted || !data.user) {
         return;
       }
-
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (!mounted) return;
-
-      if (!refreshError && refreshed.session) {
-        session = refreshed.session;
-      }
-
-      supabase.realtime.setAuth(session.access_token);
 
       setRtState('connecting');
 

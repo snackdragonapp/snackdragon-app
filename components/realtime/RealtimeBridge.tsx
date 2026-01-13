@@ -136,50 +136,36 @@ export default function RealtimeBridge({
       if (!ignore) scheduleRefresh();
     };
 
-    const run = async () => {
-      // Use getSession() to avoid a network auth call.
-      // If there is no session, we don't subscribe.
-      let { data: { session } } = await supabase.auth.getSession();
-      if (!mounted || !session?.user) {
-        return;
-      }
+    type ChannelStatus = 'SUBSCRIBED' | 'CLOSED' | 'CHANNEL_ERROR' | 'TIMED_OUT';
 
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (!mounted) return;
+    // Minimal view of the RealtimeChannel API that we care about
+    type PgChannel = {
+      on(
+        type: 'postgres_changes',
+        params: {
+          event: PostgresEvent | '*';
+          schema: string;
+          table?: string;
+          filter?: string;
+        },
+        callback: (payload: unknown) => void
+      ): PgChannel;
+      subscribe(callback: (status: ChannelStatus) => void): unknown;
+    };
 
-      if (!refreshError && refreshed.session) {
-        session = refreshed.session;
-      }
-
-      supabase.realtime.setAuth(session.access_token);
+    const subscribe = (userId: string) => {
+      if (!mounted || chan) return; // Already subscribed or unmounted
 
       const evs: PostgresEvent[] =
         events && events.length ? events : ['INSERT', 'UPDATE', 'DELETE'];
 
       // Default to user_id filter for all your user-scoped tables.
       // If `filter` is provided (including ""), we use it as-is.
-      const defaultFilter = `user_id=eq.${session.user.id}`;
+      const defaultFilter = `user_id=eq.${userId}`;
       const effectiveFilter =
         filter === undefined ? defaultFilter : filter; // allow "" to mean "no filter"
 
       setRtState('connecting');
-
-      type ChannelStatus = 'SUBSCRIBED' | 'CLOSED' | 'CHANNEL_ERROR' | 'TIMED_OUT';
-
-      // Minimal view of the RealtimeChannel API that we care about
-      type PgChannel = {
-        on(
-          type: 'postgres_changes',
-          params: {
-            event: PostgresEvent | '*';
-            schema: string;
-            table?: string;
-            filter?: string;
-          },
-          callback: (payload: unknown) => void
-        ): PgChannel;
-        subscribe(callback: (status: ChannelStatus) => void): unknown;
-      };
 
       const rawChannel = supabase.channel(channel);
       let c = rawChannel as unknown as PgChannel;
@@ -208,6 +194,17 @@ export default function RealtimeBridge({
           setRtState('idle');
         }
       }) as ReturnType<typeof supabase.channel>;
+    };
+
+    // Use getUser() to get authoritative user data.
+    // This avoids race conditions with getSession() when the session cache
+    // hasn't been updated yet (e.g., after ClientAuthSync calls setSession()).
+    const run = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!mounted || !data.user) {
+        return;
+      }
+      subscribe(data.user.id);
     };
 
     void run();

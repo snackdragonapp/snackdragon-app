@@ -24,11 +24,13 @@ export default function ClientAuthSync({
     let cancelled = false;
 
     const sync = async () => {
-      // Use getSession() to avoid a network auth call.
-      const { data: { session } } = await supabase.auth.getSession();
+      // Use getUser() to get authoritative user data.
+      // getSession() can return null/stale data during navigation transitions,
+      // causing false mismatches that trigger unnecessary router.refresh() calls.
+      const { data } = await supabase.auth.getUser();
       if (cancelled) return;
 
-      const clientUserId = session?.user?.id ?? null;
+      const clientUserId = data.user?.id ?? null;
 
       const serverChanged = lastServerUserId.current !== serverUserId;
       lastServerUserId.current = serverUserId;
