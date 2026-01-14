@@ -11,21 +11,13 @@ import {
 } from '@/components/realtime/opRegistry';
 import type { Entry } from '@/components/EntriesList';
 import { emitEntryRealtimeChange } from '@/components/EntriesList';
+import {
+  validateRealtimePayload,
+  type RowWithClientOpId,
+} from '@/components/realtime/validatePayload';
 
 type RtState = 'idle' | 'connecting' | 'live' | 'error';
 type PostgresEvent = 'INSERT' | 'UPDATE' | 'DELETE';
-
-type RowWithClientOpId = {
-  id?: unknown;
-  client_op_id?: string | null;
-  [key: string]: unknown;
-};
-
-type RtChangePayload = {
-  eventType?: PostgresEvent;
-  new: RowWithClientOpId | null;
-  old: RowWithClientOpId | null;
-};
 
 function rowToEntry(row: RowWithClientOpId): Entry | null {
   const id = typeof row.id === 'string' ? row.id : null;
@@ -110,10 +102,13 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     let chan: ReturnType<typeof supabase.channel> | null = null;
 
     const handleChange = (payload: unknown) => {
-      const p = payload as RtChangePayload;
-      const eventType = p.eventType;
-      const newRow = p.new;
-      const oldRow = p.old;
+      const validated = validateRealtimePayload(payload);
+      if (!validated) {
+        // Malformed payload; ignore to prevent crashes
+        return;
+      }
+
+      const { eventType, new: newRow, old: oldRow } = validated;
 
       const rawOp =
         (newRow?.client_op_id ?? oldRow?.client_op_id) ?? null;

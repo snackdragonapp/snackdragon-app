@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { shouldIgnoreRealtime } from '@/components/realtime/localWritePulse';
 import { hasPendingOp, ackOp, ackOpByEntryId } from '@/components/realtime/opRegistry';
+import { validateRealtimePayload } from '@/components/realtime/validatePayload';
 
 type RtState = 'idle' | 'connecting' | 'live' | 'error';
 type PostgresEvent = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -76,26 +77,18 @@ export default function RealtimeBridge({
       );
     };
 
-    type RowWithClientOpId = {
-      client_op_id?: string | null;
-      // keep it open so other columns don't cause type issues
-      [key: string]: unknown;
-    };
-
-    type RtChangePayload = {
-      new: RowWithClientOpId | null;
-      old: RowWithClientOpId | null;
-    };
-
     const handleChange = (payload: unknown) => {
-      const p = payload as RtChangePayload & { eventType?: PostgresEvent };
-      const eventType = p.eventType;
-      const newRow: RowWithClientOpId = p?.new ?? {};
-      const oldRow: RowWithClientOpId = p?.old ?? {};
+      const validated = validateRealtimePayload(payload);
+      if (!validated) {
+        // Malformed payload; ignore to prevent crashes
+        return;
+      }
+
+      const { eventType, new: newRow, old: oldRow } = validated;
 
       const rawOp =
-        newRow.client_op_id ??
-        oldRow.client_op_id ??
+        newRow?.client_op_id ??
+        oldRow?.client_op_id ??
         null;
 
       const clientOpId =
