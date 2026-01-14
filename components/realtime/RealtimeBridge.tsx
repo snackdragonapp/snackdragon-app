@@ -7,6 +7,7 @@ import { getBrowserClient } from '@/lib/supabase/client';
 import { shouldIgnoreRealtime } from '@/components/realtime/localWritePulse';
 import { hasPendingOp, ackOp, ackOpByEntryId } from '@/components/realtime/opRegistry';
 import { validateRealtimePayload } from '@/components/realtime/validatePayload';
+import { reportRealtimeStatus } from '@/components/realtime/RealtimeStatusToast';
 
 type RtState = 'idle' | 'connecting' | 'live' | 'error';
 type PostgresEvent = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -55,6 +56,11 @@ export default function RealtimeBridge({
   const router = useRouter();
   const debounceRef = useRef<number | null>(null);
   const [rtState, setRtState] = useState<RtState>('idle');
+
+  // Report status changes to the global toast system
+  useEffect(() => {
+    reportRealtimeStatus(rtState);
+  }, [rtState]);
 
   useEffect(() => {
     const supabase = getBrowserClient();

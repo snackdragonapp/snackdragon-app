@@ -15,6 +15,7 @@ import {
   validateRealtimePayload,
   type RowWithClientOpId,
 } from '@/components/realtime/validatePayload';
+import { reportRealtimeStatus } from '@/components/realtime/RealtimeStatusToast';
 
 type RtState = 'idle' | 'connecting' | 'live' | 'error';
 type PostgresEvent = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -93,6 +94,11 @@ function rowToEntry(row: RowWithClientOpId): Entry | null {
 
 export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
   const [rtState, setRtState] = useState<RtState>('idle');
+
+  // Report status changes to the global toast system
+  useEffect(() => {
+    reportRealtimeStatus(rtState);
+  }, [rtState]);
 
   useEffect(() => {
     const supabase = getBrowserClient();
