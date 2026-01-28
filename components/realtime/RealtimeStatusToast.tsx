@@ -1,7 +1,7 @@
 // components/realtime/RealtimeStatusToast.tsx
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
 
@@ -60,16 +60,33 @@ export default function RealtimeStatusToast() {
   const status = useRealtimeStatus();
   const [dismissed, setDismissed] = useState(false);
   const [visible, setVisible] = useState(false);
+  const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset dismissed state when status changes
+  // Handle visibility with delayed show (avoids flashing for quick reconnections)
   useEffect(() => {
+    // Clear any pending show timeout when status changes
+    if (showTimeoutRef.current) {
+      clearTimeout(showTimeoutRef.current);
+      showTimeoutRef.current = null;
+    }
+
     if (status === 'connected') {
       setDismissed(false);
-      // Small delay before hiding to show "reconnected" briefly
-      const timeout = setTimeout(() => setVisible(false), 500);
-      return () => clearTimeout(timeout);
+      // Brief delay before hiding
+      const hideTimeout = setTimeout(() => setVisible(false), 200);
+      return () => clearTimeout(hideTimeout);
     } else {
-      setVisible(true);
+      // Delay showing notification so quick reconnections don't flash
+      showTimeoutRef.current = setTimeout(() => {
+        setVisible(true);
+        showTimeoutRef.current = null;
+      }, 500);
+      return () => {
+        if (showTimeoutRef.current) {
+          clearTimeout(showTimeoutRef.current);
+          showTimeoutRef.current = null;
+        }
+      };
     }
   }, [status]);
 

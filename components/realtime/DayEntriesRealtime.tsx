@@ -171,36 +171,32 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       }
     };
 
-    const run = async () => {
-      // Use getUser() to get authoritative user data.
-      // This avoids race conditions with getSession() when the session cache
-      // hasn't been updated yet (e.g., after ClientAuthSync calls setSession()).
-      const { data } = await supabase.auth.getUser();
-      if (!mounted || !data.user) {
-        return;
-      }
+    type ChannelStatus =
+      | 'SUBSCRIBED'
+      | 'CLOSED'
+      | 'CHANNEL_ERROR'
+      | 'TIMED_OUT';
+
+    type PgChannel = {
+      on(
+        type: 'postgres_changes',
+        params: {
+          event: PostgresEvent | '*';
+          schema: string;
+          table?: string;
+          filter?: string;
+        },
+        callback: (payload: unknown) => void
+      ): PgChannel;
+      subscribe(callback: (status: ChannelStatus) => void): unknown;
+    };
+
+    let hasUser = false;
+
+    const subscribe = () => {
+      if (!mounted || chan) return;
 
       setRtState('connecting');
-
-      type ChannelStatus =
-        | 'SUBSCRIBED'
-        | 'CLOSED'
-        | 'CHANNEL_ERROR'
-        | 'TIMED_OUT';
-
-      type PgChannel = {
-        on(
-          type: 'postgres_changes',
-          params: {
-            event: PostgresEvent | '*';
-            schema: string;
-            table?: string;
-            filter?: string;
-          },
-          callback: (payload: unknown) => void
-        ): PgChannel;
-        subscribe(callback: (status: ChannelStatus) => void): unknown;
-      };
 
       const rawChannel = supabase.channel(`rt-day-entries-${dayId}`);
       const c = rawChannel as unknown as PgChannel;
@@ -230,10 +226,39 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       }) as ReturnType<typeof supabase.channel>;
     };
 
+    const run = async () => {
+      // Use getUser() to get authoritative user data.
+      // This avoids race conditions with getSession() when the session cache
+      // hasn't been updated yet (e.g., after ClientAuthSync calls setSession()).
+      const { data } = await supabase.auth.getUser();
+      if (!mounted || !data.user) {
+        return;
+      }
+      hasUser = true;
+      subscribe();
+    };
+
+    // Reconnect when app becomes visible (e.g., after mobile sleep)
+    const handleVisibilityChange = () => {
+      if (!mounted || !hasUser) return;
+      if (document.visibilityState !== 'visible') return;
+
+      // Reconnect immediately to avoid waiting for WebSocket heartbeat timeout
+      if (chan) {
+        supabase.removeChannel(chan);
+        chan = null;
+      }
+      setRtState('idle');
+      subscribe();
+    };
+
     void run();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       mounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (chan) supabase.removeChannel(chan);
     };
   }, [dayId]);

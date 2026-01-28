@@ -65,6 +65,7 @@ export default function RealtimeBridge({
   useEffect(() => {
     const supabase = getBrowserClient();
     let mounted = true;
+    let userId: string | null = null;
     setRtState('idle');
 
     // Real channel instance for cleanup
@@ -203,13 +204,32 @@ export default function RealtimeBridge({
       if (!mounted || !data.user) {
         return;
       }
-      subscribe(data.user.id);
+      userId = data.user.id;
+      subscribe(userId);
+    };
+
+    // Reconnect when app becomes visible (e.g., after mobile sleep)
+    const handleVisibilityChange = () => {
+      if (!mounted || !userId) return;
+      if (document.visibilityState !== 'visible') return;
+
+      // If channel is in error or closed state, reconnect immediately
+      // This avoids waiting for WebSocket heartbeat timeout
+      if (chan) {
+        supabase.removeChannel(chan);
+        chan = null;
+      }
+      setRtState('idle');
+      subscribe(userId);
     };
 
     void run();
 
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       mounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (debounceRef.current) {
         window.clearTimeout(debounceRef.current);
         debounceRef.current = null;
