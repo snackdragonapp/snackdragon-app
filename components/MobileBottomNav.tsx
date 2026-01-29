@@ -131,7 +131,7 @@ export default function MobileBottomNav({
       `}</style>
 
       {/* Mobile bottom primary nav (pinned) */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 border-t bg-header z-30">
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 border-t bg-header z-30 transform-gpu">
         <div className="mx-auto max-w-2xl px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
           <ul className="flex items-center gap-2">
             <li className="flex-1">
