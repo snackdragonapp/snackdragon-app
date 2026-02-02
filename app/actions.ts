@@ -1,6 +1,7 @@
 // app/actions.ts
 'use server';
 
+import { revalidatePath } from 'next/cache'; // <--- Import this
 import { createClient } from '@/lib/supabase/server';
 import { resolveDogId } from '@/lib/dogs';
 import { isValidYMD, addDaysYMD } from '@/lib/dates';
@@ -34,6 +35,10 @@ export async function toggleEntryStatusAction(formData: FormData) {
     .eq('id', entryId);
 
   if (error) throw new Error(error.message);
+
+  // ✅ FIX: Invalidate day and charts so navigation back shows correct state
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/charts');
 }
 
 export async function deleteEntryAction(formData: FormData) {
@@ -58,6 +63,10 @@ export async function deleteEntryAction(formData: FormData) {
     p_client_op_id: opId,
   });
   if (error) throw new Error(error.message);
+
+  // ✅ FIX: Invalidate
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/charts');
 }
 
 export async function updateEntryQtyAndStatusAction(formData: FormData) {
@@ -88,6 +97,10 @@ export async function updateEntryQtyAndStatusAction(formData: FormData) {
     p_client_op_id: opId,
   });
   if (error) throw new Error(error.message);
+
+  // ✅ FIX: Invalidate
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/charts');
 }
 
 export async function addEntryFromCatalogAction(formData: FormData) {
@@ -138,6 +151,10 @@ export async function addEntryFromCatalogAction(formData: FormData) {
   });
 
   if (rpcErr) throw new Error(rpcErr.message);
+
+  // ✅ FIX: Invalidate
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/charts');
 }
 
 export type UpdateEntryQtyResult =
@@ -185,6 +202,10 @@ export async function updateEntryQtyAction(
     throw new Error(error.message);
   }
 
+  // ✅ FIX: Invalidate
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/charts');
+
   return { ok: true };
 }
 
@@ -216,6 +237,9 @@ export async function reorderEntriesAction(input: {
   });
 
   if (error) throw new Error(error.message);
+
+  // ✅ FIX: Invalidate order
+  revalidatePath('/dog/[dogId]/day/[ymd]');
 }
 
 export async function copyPreviousDayEntriesAction(formData: FormData) {
@@ -229,8 +253,7 @@ export async function copyPreviousDayEntriesAction(formData: FormData) {
   if (!isValidYMD(dayDate)) throw new Error('Missing or invalid date');
 
   const dogIdRaw = formData.get('dog_id');
-  const dogId =
-    typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
+  const dogId = typeof dogIdRaw === 'string' && dogIdRaw.trim() ? dogIdRaw.trim() : null;
   const resolvedDogId = await resolveDogId(supabase, dogId);
 
   const prevYMD = addDaysYMD(dayDate, -1);
@@ -309,4 +332,8 @@ export async function copyPreviousDayEntriesAction(formData: FormData) {
 
     if (insErr) throw new Error(insErr.message);
   }
+
+  // ✅ FIX: Invalidate
+  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/charts');
 }
