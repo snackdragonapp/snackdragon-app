@@ -308,6 +308,11 @@ export default function EntriesList({
       prev.map((it) => {
         if (it.id !== id) return it;
 
+        // Zero of anything is always zero calories — no per-unit needed
+        if (newQty === 0) {
+          return { ...it, qty: '0', kcal_snapshot: 0 };
+        }
+
         // Prefer the canonical per-unit snapshot if we have it
         let perUnit =
           it.kcal_per_unit_snapshot != null
@@ -669,6 +674,9 @@ const AutoSaveQtyForm = forwardRef<
 
   const { schedule: scheduleDebounced, cancel: cancelDebounce } = useDebouncedCallback(600);
 
+  // Don't let external prop changes overwrite the user's active input
+  const focusedRef = useRef(false);
+
   // Prevent a late error handler from “rolling back” a newer qty.
   const lastOpRef = useRef<string | null>(null);
 
@@ -677,11 +685,13 @@ const AutoSaveQtyForm = forwardRef<
 
   const parseQty = useCallback((v: string): number | null => {
     const n = parseFloat(v);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    return Number.isFinite(n) && n >= 0 ? n : null;
   }, []);
 
-  // Keep input in sync when server refresh/realtime replaces props
+  // Keep input in sync when server refresh/realtime replaces props,
+  // but not while the user is actively editing
   useEffect(() => {
+    if (focusedRef.current) return;
     setVal(initialQty);
     const n = parseQty(initialQty);
     if (n != null) lastGoodQtyRef.current = n;
@@ -820,20 +830,25 @@ const AutoSaveQtyForm = forwardRef<
             min="0"
             inputMode="decimal"
             value={val}
+            onFocus={() => { focusedRef.current = true; }}
             onInput={(e) => {
               const nextStr = e.currentTarget.value;
               setVal(nextStr);
               const n = parseQty(nextStr);
-              if (n != null) commit(n, 'debounced');
+              if (n != null) {
+                commit(n, 'debounced');
+              } else {
+                cancelDebounce();
+                onQtyOptimistic(0);
+              }
             }}
             onBlur={(e) => {
+              focusedRef.current = false;
               const n = parseQty(e.currentTarget.value);
               if (n != null) {
                 commit(n, 'immediate');
               } else {
-                // Invalid/blank -> revert to last known qty
                 cancelDebounce();
-                setVal(initialQty);
               }
             }}
             onKeyDown={(e) => {
@@ -905,11 +920,11 @@ function CheckboxStatusForm({
           const latest = getLatestQty ? getLatestQty() : null;
           const fallback = parseFloat(String(initialQtyStr)) || 0;
           const qtyToSend =
-            latest != null && Number.isFinite(latest) && latest > 0
+            latest != null && Number.isFinite(latest) && latest >= 0
               ? latest
-              : Number.isFinite(fallback) && fallback > 0
+              : Number.isFinite(fallback) && fallback >= 0
               ? fallback
-              : 1; // last-resort safety; server requires > 0
+              : 0;
 
           const opId = crypto.randomUUID();
           lastOpRef.current = opId;

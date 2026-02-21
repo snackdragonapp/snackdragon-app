@@ -124,7 +124,7 @@ function CatalogChipButton({
     const mult = 1; // current UI always uses mult=1
     const qty = baseQty * mult;
 
-    if (!Number.isFinite(qty) || qty <= 0) {
+    if (!Number.isFinite(qty) || qty < 0) {
       toast({
         tone: 'error',
         message: 'This catalog item has an invalid default serving. Edit it in Catalog first.',

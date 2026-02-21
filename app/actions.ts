@@ -80,7 +80,7 @@ export async function updateEntryQtyAndStatusAction(formData: FormData) {
   const nextStatus = String(formData.get('next_status') ?? 'planned');
   const qty = Number(formData.get('qty') ?? '0');
   if (!entryId) throw new Error('Missing entry_id');
-  if (!Number.isFinite(qty) || qty <= 0) throw new Error('Qty must be > 0');
+  if (!Number.isFinite(qty) || qty < 0) throw new Error('Qty must be >= 0');
   if (nextStatus !== 'planned' && nextStatus !== 'eaten') throw new Error('Invalid status');
 
   const clientOpIdRaw = formData.get('client_op_id');
@@ -173,7 +173,7 @@ export async function updateEntryQtyAction(
   const entryId = String(formData.get('entry_id') ?? '');
   const qty = Number(formData.get('qty') ?? '0');
   if (!entryId) throw new Error('Missing entry_id');
-  if (!Number.isFinite(qty) || qty <= 0) throw new Error('Qty must be > 0');
+  if (!Number.isFinite(qty) || qty < 0) throw new Error('Qty must be >= 0');
 
   const clientOpIdRaw = formData.get('client_op_id');
   const clientOpId =
@@ -306,7 +306,7 @@ export async function copyPreviousDayEntriesAction(formData: FormData) {
     const kcal = Number((row as { kcal_snapshot?: unknown }).kcal_snapshot);
 
     if (!name) throw new Error('Invalid entry name');
-    if (!Number.isFinite(qty) || qty <= 0) throw new Error('Invalid entry qty');
+    if (!Number.isFinite(qty) || qty < 0) throw new Error('Invalid entry qty');
     if (!Number.isFinite(kcal)) throw new Error('Invalid entry kcal');
 
     const catalogItemIdRaw = (row as { catalog_item_id?: unknown }).catalog_item_id;

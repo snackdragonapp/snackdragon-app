@@ -31,12 +31,10 @@ declare
   v_user   uuid := auth.uid();
   v_owner  uuid;
   v_dog_id uuid;
-
   v_name   text;
   v_unit   text;
   v_kpu    numeric;
   v_defqty numeric;
-
   v_qty    numeric;
   v_kcal   numeric;
   v_id     uuid;
@@ -53,7 +51,6 @@ begin
     raise exception 'invalid multiplier' using errcode = '22023';
   end if;
 
-  -- Validate day belongs to caller; also capture the day's dog_id
   select dg.user_id, d.dog_id
     into v_owner, v_dog_id
   from public.days d
@@ -64,7 +61,6 @@ begin
     raise exception 'forbidden: day not owned by caller' using errcode = '42501';
   end if;
 
-  -- Validate catalog item belongs to the SAME dog as the day (and caller)
   select ci.name, ci.unit, ci.kcal_per_unit, ci.default_qty
     into v_name, v_unit, v_kpu, v_defqty
   from public.catalog_items ci
@@ -79,23 +75,15 @@ begin
   end if;
 
   v_qty := v_defqty * p_mult;
-  if v_qty is null or v_qty <= 0 then
+  if v_qty is null or v_qty < 0 then
     raise exception 'invalid qty' using errcode = '22023';
   end if;
 
-  -- Match existing app behavior: round kcal to 2 decimals
   v_kcal := round((v_qty * v_kpu)::numeric, 2);
 
   v_id := public.add_entry_with_order(
-    p_day_id,
-    v_name,
-    v_qty,
-    v_unit,
-    v_kcal,
-    p_status,
-    p_catalog_item_id,
-    p_client_op_id,
-    p_id
+    p_day_id, v_name, v_qty, v_unit, v_kcal, p_status,
+    p_catalog_item_id, p_client_op_id, p_id
   );
 
   return v_id;
@@ -154,11 +142,10 @@ begin
       using errcode = '42501';
   end if;
 
-  if p_qty is null or p_qty <= 0 then
+  if p_qty is null or p_qty < 0 then
     raise exception 'invalid qty' using errcode = '22023';
   end if;
 
-  -- Retry to avoid UNIQUE(day_id, ordering) races
   for i in 1..3 loop
     select coalesce(max(e.ordering), -1) + 1
       into v_next
@@ -167,34 +154,26 @@ begin
 
     begin
       insert into public.entries (
-        day_id,
-        name,
-        qty,
-        unit,
-        kcal_snapshot,
-        status,
-        ordering,
-        kcal_per_unit_snapshot,
-        catalog_item_id,
-        client_op_id
+        day_id, name, qty, unit, kcal_snapshot, status,
+        ordering, kcal_per_unit_snapshot, catalog_item_id, client_op_id
       ) values (
-        p_day_id,
-        p_name,
-        p_qty,
-        p_unit,
-        p_kcal,
-        p_status,
-        v_next,
-        round((p_kcal / p_qty)::numeric, 4),
-        p_catalog_item_id,
-        p_client_op_id
+        p_day_id, p_name, p_qty, p_unit, p_kcal, p_status, v_next,
+        CASE
+          WHEN p_qty > 0 THEN round((p_kcal / p_qty)::numeric, 4)
+          WHEN p_catalog_item_id IS NOT NULL THEN (
+            SELECT round(ci.kcal_per_unit::numeric, 4)
+            FROM public.catalog_items ci WHERE ci.id = p_catalog_item_id
+          )
+          ELSE 0
+        END,
+        p_catalog_item_id, p_client_op_id
       )
       returning id into v_id;
 
-      return v_id; -- success
+      return v_id;
     exception
       when unique_violation then
-        continue; -- someone else grabbed v_next; recompute and retry
+        continue;
     end;
   end loop;
 
@@ -232,11 +211,10 @@ begin
       using errcode = '42501';
   end if;
 
-  if p_qty is null or p_qty <= 0 then
+  if p_qty is null or p_qty < 0 then
     raise exception 'invalid qty' using errcode = '22023';
   end if;
 
-  -- Retry to avoid UNIQUE(day_id, ordering) races
   for i in 1..3 loop
     select coalesce(max(e.ordering), -1) + 1
       into v_next
@@ -245,36 +223,27 @@ begin
 
     begin
       insert into public.entries (
-        id,
-        day_id,
-        name,
-        qty,
-        unit,
-        kcal_snapshot,
-        status,
-        ordering,
-        kcal_per_unit_snapshot,
-        catalog_item_id,
-        client_op_id
+        id, day_id, name, qty, unit, kcal_snapshot, status,
+        ordering, kcal_per_unit_snapshot, catalog_item_id, client_op_id
       ) values (
         coalesce(p_id, gen_random_uuid()),
-        p_day_id,
-        p_name,
-        p_qty,
-        p_unit,
-        p_kcal,
-        p_status,
-        v_next,
-        round((p_kcal / p_qty)::numeric, 4),
-        p_catalog_item_id,
-        p_client_op_id
+        p_day_id, p_name, p_qty, p_unit, p_kcal, p_status, v_next,
+        CASE
+          WHEN p_qty > 0 THEN round((p_kcal / p_qty)::numeric, 4)
+          WHEN p_catalog_item_id IS NOT NULL THEN (
+            SELECT round(ci.kcal_per_unit::numeric, 4)
+            FROM public.catalog_items ci WHERE ci.id = p_catalog_item_id
+          )
+          ELSE 0
+        END,
+        p_catalog_item_id, p_client_op_id
       )
       returning id into v_id;
 
-      return v_id; -- success
+      return v_id;
     exception
       when unique_violation then
-        continue; -- someone else grabbed v_next; recompute and retry
+        continue;
     end;
   end loop;
 
@@ -681,25 +650,16 @@ begin
     raise exception 'unauthenticated' using errcode = '28000';
   end if;
 
-  if p_qty is null or p_qty <= 0 then
+  if p_qty is null or p_qty < 0 then
     raise exception 'invalid qty' using errcode = '22023';
   end if;
 
-  -- Lock the entry and verify ownership via the parent day + dog
   select
-    e.day_id,
-    d.dog_id,
-    e.catalog_item_id,
-    e.kcal_per_unit_snapshot,
-    e.qty,
-    e.kcal_snapshot
+    e.day_id, d.dog_id, e.catalog_item_id,
+    e.kcal_per_unit_snapshot, e.qty, e.kcal_snapshot
   into
-    v_day,
-    v_dog_id,
-    v_catalog_item_id,
-    v_per_unit,
-    v_old_qty,
-    v_old_kcal
+    v_day, v_dog_id, v_catalog_item_id,
+    v_per_unit, v_old_qty, v_old_kcal
   from public.entries e
   join public.days d on d.id = e.day_id
   join public.dogs dg on dg.id = d.dog_id
@@ -711,7 +671,6 @@ begin
       using errcode = '42501';
   end if;
 
-  -- If snapshot is missing/invalid, try deriving from the row’s stored data
   if v_per_unit is null or v_per_unit <= 0 then
     if v_old_kcal is not null and v_old_kcal > 0
        and v_old_qty is not null and v_old_qty > 0 then
@@ -719,7 +678,6 @@ begin
     end if;
   end if;
 
-  -- If still unresolved and we have a catalog item, use catalog_items.kcal_per_unit
   if (v_per_unit is null or v_per_unit <= 0) and v_catalog_item_id is not null then
     select ci.kcal_per_unit
       into v_ci_per_unit
@@ -773,11 +731,10 @@ begin
     raise exception 'invalid status' using errcode = '22023';
   end if;
 
-  if p_qty is null or p_qty <= 0 then
+  if p_qty is null or p_qty < 0 then
     raise exception 'invalid qty' using errcode = '22023';
   end if;
 
-  -- Lock the entry and verify ownership via the parent day
   select e.day_id, e.kcal_per_unit_snapshot, e.qty, e.kcal_snapshot
     into v_day, v_per_unit, v_old_qty, v_old_kcal
   from public.entries e
@@ -790,7 +747,6 @@ begin
     raise exception 'forbidden: entry not owned by caller' using errcode = '42501';
   end if;
 
-  -- Fallback for very old rows that may lack a snapshot
   v_per_unit := coalesce(v_per_unit,
                          round((v_old_kcal / nullif(v_old_qty, 0))::numeric, 4));
 
@@ -832,11 +788,10 @@ begin
     raise exception 'invalid status' using errcode = '22023';
   end if;
 
-  if p_qty is null or p_qty <= 0 then
+  if p_qty is null or p_qty < 0 then
     raise exception 'invalid qty' using errcode = '22023';
   end if;
 
-  -- Lock the entry and verify ownership via the parent day
   select e.day_id,
          e.kcal_per_unit_snapshot,
          e.qty,
@@ -853,7 +808,6 @@ begin
       using errcode = '42501';
   end if;
 
-  -- Fallback for very old rows that may lack a snapshot
   v_per_unit := coalesce(
     v_per_unit,
     round((v_old_kcal / nullif(v_old_qty, 0))::numeric, 4)

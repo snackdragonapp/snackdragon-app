@@ -46,7 +46,7 @@ function rowToEntry(row: RowWithClientOpId): Entry | null {
       : qtyRaw != null
       ? Number(qtyRaw)
       : NaN;
-  const qtyStr = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum.toString() : '0';
+  const qtyStr = Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum.toString() : '0';
 
   const kcalNum =
     typeof kcalRaw === 'number'
