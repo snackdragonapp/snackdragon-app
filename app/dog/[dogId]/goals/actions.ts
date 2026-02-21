@@ -60,15 +60,15 @@ export async function createGoalAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   // Goals affect day summaries and charts.
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 
   if (intent === 'create_return' && next) {
     revalidatePath(next);
     redirect(next);
   }
 
-  revalidatePath('/dog/[dogId]/goals');
+  revalidatePath('/dog/[dogId]/goals', 'page');
 }
 
 export async function updateGoalAction(formData: FormData) {
@@ -128,9 +128,9 @@ export async function updateGoalAction(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
-  revalidatePath('/dog/[dogId]/goals');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
+  revalidatePath('/dog/[dogId]/goals', 'page');
 }
 
 export async function deleteGoalAction(formData: FormData) {
@@ -146,7 +146,7 @@ export async function deleteGoalAction(formData: FormData) {
   const { error } = await supabase.from('goals').delete().eq('id', id);
   if (error) throw new Error(error.message);
 
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
-  revalidatePath('/dog/[dogId]/goals');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
+  revalidatePath('/dog/[dogId]/goals', 'page');
 }

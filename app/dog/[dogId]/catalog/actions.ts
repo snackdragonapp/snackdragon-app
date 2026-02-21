@@ -84,7 +84,7 @@ export async function createCatalogItemAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   // Catalog changes affect day chips; invalidate day pages too.
-  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
 
   // If user chose "Create & return" and provided a safe relative path, go back.
   if (intent === 'create_return' && next) {
@@ -94,7 +94,7 @@ export async function createCatalogItemAction(formData: FormData) {
   }
 
   // Default behavior: stay on catalog
-  revalidatePath('/dog/[dogId]/catalog');
+  revalidatePath('/dog/[dogId]/catalog', 'page');
   revalidatePath('/'); // optional; ok to keep
 }
 
@@ -129,8 +129,8 @@ export async function updateCatalogItemAction(formData: FormData) {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
-  revalidatePath('/dog/[dogId]/catalog');
-  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/catalog', 'page');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
   revalidatePath('/');
 }
 
@@ -146,7 +146,7 @@ export async function deleteCatalogItemAction(formData: FormData) {
 
   const { error } = await supabase.from('catalog_items').delete().eq('id', id);
   if (error) throw new Error(error.message);
-  revalidatePath('/dog/[dogId]/catalog');
-  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/catalog', 'page');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
   revalidatePath('/');
 }

@@ -37,8 +37,8 @@ export async function toggleEntryStatusAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   // ✅ FIX: Invalidate day and charts so navigation back shows correct state
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
 export async function deleteEntryAction(formData: FormData) {
@@ -65,8 +65,8 @@ export async function deleteEntryAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
 export async function updateEntryQtyAndStatusAction(formData: FormData) {
@@ -99,8 +99,8 @@ export async function updateEntryQtyAndStatusAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
 export async function addEntryFromCatalogAction(formData: FormData) {
@@ -153,8 +153,8 @@ export async function addEntryFromCatalogAction(formData: FormData) {
   if (rpcErr) throw new Error(rpcErr.message);
 
   // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
 export type UpdateEntryQtyResult =
@@ -203,8 +203,8 @@ export async function updateEntryQtyAction(
   }
 
   // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 
   return { ok: true };
 }
@@ -239,7 +239,7 @@ export async function reorderEntriesAction(input: {
   if (error) throw new Error(error.message);
 
   // ✅ FIX: Invalidate order
-  revalidatePath('/dog/[dogId]/day/[ymd]');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
 }
 
 export async function copyPreviousDayEntriesAction(formData: FormData) {
@@ -334,6 +334,6 @@ export async function copyPreviousDayEntriesAction(formData: FormData) {
   }
 
   // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]');
-  revalidatePath('/dog/[dogId]/charts');
+  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  revalidatePath('/dog/[dogId]/charts', 'page');
 }
