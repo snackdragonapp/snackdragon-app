@@ -153,21 +153,33 @@ export default function RealtimeBridge({
       subscribe(callback: (status: ChannelStatus) => void): unknown;
     };
 
-    const subscribe = (userId: string) => {
-      if (!mounted || chan) return; // Already subscribed or unmounted
+    let retryTimer: number | null = null;
+    let channelSeq = 0;
+
+    const scheduleRetry = () => {
+      if (retryTimer) window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        if (mounted && userId) subscribe(userId);
+      }, 3000);
+    };
+
+    const subscribe = (uid: string) => {
+      if (!mounted) return;
+      if (retryTimer) { window.clearTimeout(retryTimer); retryTimer = null; }
+      if (chan) { supabase.removeChannel(chan); chan = null; }
+
+      channelSeq++;
+      setRtState('connecting');
 
       const evs: PostgresEvent[] =
         events && events.length ? events : ['INSERT', 'UPDATE', 'DELETE'];
 
-      // Default to user_id filter for all your user-scoped tables.
-      // If `filter` is provided (including ""), we use it as-is.
-      const defaultFilter = `user_id=eq.${userId}`;
+      const defaultFilter = `user_id=eq.${uid}`;
       const effectiveFilter =
-        filter === undefined ? defaultFilter : filter; // allow "" to mean "no filter"
+        filter === undefined ? defaultFilter : filter;
 
-      setRtState('connecting');
-
-      const rawChannel = supabase.channel(channel);
+      const rawChannel = supabase.channel(`${channel}-${channelSeq}`);
       let c = rawChannel as unknown as PgChannel;
 
       for (const ev of evs) {
@@ -190,6 +202,7 @@ export default function RealtimeBridge({
           setRtState('live');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setRtState('error');
+          scheduleRetry();
         } else if (status === 'CLOSED') {
           setRtState('idle');
         }
@@ -213,14 +226,9 @@ export default function RealtimeBridge({
       if (!mounted || !userId) return;
       if (document.visibilityState !== 'visible') return;
 
-      // If channel is in error or closed state, reconnect immediately
-      // This avoids waiting for WebSocket heartbeat timeout
-      if (chan) {
-        supabase.removeChannel(chan);
-        chan = null;
-      }
-      setRtState('idle');
       subscribe(userId);
+      // Re-fetch server data to catch up on changes missed while backgrounded
+      scheduleRefresh();
     };
 
     void run();
@@ -230,6 +238,7 @@ export default function RealtimeBridge({
     return () => {
       mounted = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (retryTimer) window.clearTimeout(retryTimer);
       if (debounceRef.current) {
         window.clearTimeout(debounceRef.current);
         debounceRef.current = null;

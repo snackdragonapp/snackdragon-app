@@ -2,6 +2,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { uuid } from '@/lib/uuid';
 import { registerPendingOp, completeOp, ackOp } from '@/components/realtime/opRegistry';
 import {
   emitEntryAdded,
@@ -116,8 +117,8 @@ function CatalogChipButton({
 }) {
   const onClick = () => {
     // Generate ids for THIS gesture
-    const opId = crypto.randomUUID();
-    const entryId = crypto.randomUUID();
+    const opId = uuid();
+    const entryId = uuid();
 
     // Build an optimistic Entry shape for the Day list
     const baseQty = Number(item.default_qty ?? 0);

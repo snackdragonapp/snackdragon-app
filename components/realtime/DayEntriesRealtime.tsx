@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getBrowserClient } from '@/lib/supabase/client';
 import {
   hasPendingOp,
@@ -93,6 +94,7 @@ function rowToEntry(row: RowWithClientOpId): Entry | null {
 }
 
 export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
+  const router = useRouter();
   const [rtState, setRtState] = useState<RtState>('idle');
 
   // Report status changes to the global toast system
@@ -192,13 +194,26 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     };
 
     let hasUser = false;
+    let retryTimer: number | null = null;
+    let channelSeq = 0;
+
+    const scheduleRetry = () => {
+      if (retryTimer) window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        if (mounted && hasUser) subscribe();
+      }, 3000);
+    };
 
     const subscribe = () => {
-      if (!mounted || chan) return;
+      if (!mounted) return;
+      if (retryTimer) { window.clearTimeout(retryTimer); retryTimer = null; }
+      if (chan) { supabase.removeChannel(chan); chan = null; }
 
+      channelSeq++;
       setRtState('connecting');
 
-      const rawChannel = supabase.channel(`rt-day-entries-${dayId}`);
+      const rawChannel = supabase.channel(`rt-day-entries-${dayId}-${channelSeq}`);
       const c = rawChannel as unknown as PgChannel;
 
       (['INSERT', 'UPDATE', 'DELETE'] as PostgresEvent[]).forEach((ev) => {
@@ -220,6 +235,7 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
           setRtState('live');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setRtState('error');
+          scheduleRetry();
         } else if (status === 'CLOSED') {
           setRtState('idle');
         }
@@ -243,13 +259,9 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       if (!mounted || !hasUser) return;
       if (document.visibilityState !== 'visible') return;
 
-      // Reconnect immediately to avoid waiting for WebSocket heartbeat timeout
-      if (chan) {
-        supabase.removeChannel(chan);
-        chan = null;
-      }
-      setRtState('idle');
       subscribe();
+      // Re-fetch server data to catch up on changes missed while backgrounded
+      router.refresh();
     };
 
     void run();
@@ -259,9 +271,10 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     return () => {
       mounted = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (retryTimer) window.clearTimeout(retryTimer);
       if (chan) supabase.removeChannel(chan);
     };
-  }, [dayId]);
+  }, [dayId, router]);
 
   // Dev-only indicator; hide in production
   if (process.env.NODE_ENV === 'production') {

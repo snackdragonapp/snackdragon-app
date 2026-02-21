@@ -10,6 +10,7 @@ import {
   useCallback,
   useSyncExternalStore,
 } from 'react';
+import { uuid } from '@/lib/uuid';
 import {
   DndContext,
   closestCenter,
@@ -252,7 +253,7 @@ export default function EntriesList({
   );
 
   async function persistOrder(next: Entry[], prev: Entry[], movedEntryId: string) {
-    const opId = crypto.randomUUID();
+    const opId = uuid();
     try {
       setSaving(true);
 
@@ -598,7 +599,7 @@ function EntryDeleteButton({
     // Optimistic UI first
     onDeleteOptimistic(entry.id);
 
-    const opId = crypto.randomUUID();
+    const opId = uuid();
     registerPendingOp({
       id: opId,
       kind: 'delete',
@@ -780,11 +781,11 @@ const AutoSaveQtyForm = forwardRef<
 
       if (mode === 'immediate') {
         cancelDebounce();
-        const opId = crypto.randomUUID();
+        const opId = uuid();
         void sendQty(opId, next, prevGood);
       } else {
         scheduleDebounced(() => {
-          const opId = crypto.randomUUID();
+          const opId = uuid();
           void sendQty(opId, next, prevGood);
         });
       }
@@ -926,7 +927,7 @@ function CheckboxStatusForm({
               ? fallback
               : 0;
 
-          const opId = crypto.randomUUID();
+          const opId = uuid();
           lastOpRef.current = opId;
 
           registerPendingOp({

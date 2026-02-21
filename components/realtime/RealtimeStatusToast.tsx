@@ -13,6 +13,11 @@ function notifyListeners() {
   listeners.forEach((fn) => fn());
 }
 
+// Grace period after returning from background: suppress the toast while
+// the WebSocket reconnects (normal mobile behaviour, not a real problem).
+const VISIBILITY_GRACE_MS = 3000;
+let graceUntil = 0;
+
 /**
  * Report a connection state change from a realtime component.
  * Call with 'error' when connection fails, 'live' when connected.
@@ -62,6 +67,23 @@ export default function RealtimeStatusToast() {
   const [visible, setVisible] = useState(false);
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // When the page returns from background, start a grace period so the toast
+  // doesn't flash while the WebSocket reconnects (typically 1-3s on mobile).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        graceUntil = Date.now() + VISIBILITY_GRACE_MS;
+        setVisible(false);
+        if (showTimeoutRef.current) {
+          clearTimeout(showTimeoutRef.current);
+          showTimeoutRef.current = null;
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   // Handle visibility with delayed show (avoids flashing for quick reconnections)
   useEffect(() => {
     // Clear any pending show timeout when status changes
@@ -76,11 +98,15 @@ export default function RealtimeStatusToast() {
       const hideTimeout = setTimeout(() => setVisible(false), 200);
       return () => clearTimeout(hideTimeout);
     } else {
-      // Delay showing notification so quick reconnections don't flash
+      // Delay showing notification so quick reconnections don't flash.
+      // Use a longer delay if we're inside a visibility grace period
+      // (i.e. the page just returned from background on mobile).
+      const remaining = Math.max(0, graceUntil - Date.now());
+      const delay = Math.max(500, remaining);
       showTimeoutRef.current = setTimeout(() => {
         setVisible(true);
         showTimeoutRef.current = null;
-      }, 500);
+      }, delay);
       return () => {
         if (showTimeoutRef.current) {
           clearTimeout(showTimeoutRef.current);

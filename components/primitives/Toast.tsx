@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { uuid } from '@/lib/uuid';
 
 type Tone = 'info' | 'success' | 'error';
 
@@ -27,7 +28,7 @@ const listeners = new Set<Listener>();
 
 export function toast(input: ToastInput) {
   const t: ToastItem = {
-    id: crypto.randomUUID(),
+    id: uuid(),
     tone: input.tone ?? 'info',
     message: input.message,
     durationMs:
