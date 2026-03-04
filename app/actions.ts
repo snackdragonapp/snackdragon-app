@@ -64,8 +64,7 @@ export async function deleteEntryAction(formData: FormData) {
   });
   if (error) throw new Error(error.message);
 
-  // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  // Day page is optimistic + Realtime; only revalidate charts.
   revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
@@ -98,8 +97,8 @@ export async function updateEntryQtyAndStatusAction(formData: FormData) {
   });
   if (error) throw new Error(error.message);
 
-  // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  // Charts may be stale after a status change; day page is handled
+  // optimistically + via Realtime, so we only revalidate charts here.
   revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
@@ -152,8 +151,7 @@ export async function addEntryFromCatalogAction(formData: FormData) {
 
   if (rpcErr) throw new Error(rpcErr.message);
 
-  // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  // Day page is optimistic + Realtime; only revalidate charts.
   revalidatePath('/dog/[dogId]/charts', 'page');
 }
 
@@ -202,8 +200,7 @@ export async function updateEntryQtyAction(
     throw new Error(error.message);
   }
 
-  // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  // Day page is optimistic + Realtime; only revalidate charts.
   revalidatePath('/dog/[dogId]/charts', 'page');
 
   return { ok: true };
@@ -238,8 +235,7 @@ export async function reorderEntriesAction(input: {
 
   if (error) throw new Error(error.message);
 
-  // ✅ FIX: Invalidate order
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  // Day page is optimistic + Realtime; no revalidation needed.
 }
 
 export async function copyPreviousDayEntriesAction(formData: FormData) {
