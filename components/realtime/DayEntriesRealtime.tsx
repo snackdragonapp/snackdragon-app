@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { getBrowserClient } from '@/lib/supabase/client';
 import {
   hasPendingOp,
@@ -94,7 +93,6 @@ function rowToEntry(row: RowWithClientOpId): Entry | null {
 }
 
 export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
-  const router = useRouter();
   const [rtState, setRtState] = useState<RtState>('idle');
 
   // Report status changes to the global toast system
@@ -196,6 +194,9 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
     let hasUser = false;
     let retryTimer: number | null = null;
     let channelSeq = 0;
+    // Track current state inside the closure so the visibility handler
+    // can check it without needing a ref or stale React state.
+    let currentState: RtState = 'idle';
 
     const scheduleRetry = () => {
       if (retryTimer) window.clearTimeout(retryTimer);
@@ -205,13 +206,18 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       }, 3000);
     };
 
+    const setStateTracked = (s: RtState) => {
+      currentState = s;
+      setRtState(s);
+    };
+
     const subscribe = () => {
       if (!mounted) return;
       if (retryTimer) { window.clearTimeout(retryTimer); retryTimer = null; }
       if (chan) { supabase.removeChannel(chan); chan = null; }
 
       channelSeq++;
-      setRtState('connecting');
+      setStateTracked('connecting');
 
       const rawChannel = supabase.channel(`rt-day-entries-${dayId}-${channelSeq}`);
       const c = rawChannel as unknown as PgChannel;
@@ -232,12 +238,12 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       chan = c.subscribe((status: ChannelStatus) => {
         if (!mounted) return;
         if (status === 'SUBSCRIBED') {
-          setRtState('live');
+          setStateTracked('live');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setRtState('error');
+          setStateTracked('error');
           scheduleRetry();
         } else if (status === 'CLOSED') {
-          setRtState('idle');
+          setStateTracked('idle');
         }
       }) as ReturnType<typeof supabase.channel>;
     };
@@ -254,14 +260,15 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       subscribe();
     };
 
-    // Reconnect when app becomes visible (e.g., after mobile sleep)
+    // Reconnect when app becomes visible, but only if the connection is unhealthy.
+    // A healthy channel stays connected while backgrounded; tearing it down
+    // unnecessarily causes a brief 'connecting' state that can trigger the toast.
     const handleVisibilityChange = () => {
       if (!mounted || !hasUser) return;
       if (document.visibilityState !== 'visible') return;
+      if (currentState === 'live') return; // already connected, nothing to do
 
       subscribe();
-      // Re-fetch server data to catch up on changes missed while backgrounded
-      router.refresh();
     };
 
     void run();
@@ -274,7 +281,7 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       if (retryTimer) window.clearTimeout(retryTimer);
       if (chan) supabase.removeChannel(chan);
     };
-  }, [dayId, router]);
+  }, [dayId]);
 
   // Dev-only indicator; hide in production
   if (process.env.NODE_ENV === 'production') {

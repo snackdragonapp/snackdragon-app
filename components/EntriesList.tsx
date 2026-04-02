@@ -35,7 +35,6 @@ import {
   deleteEntryAction,
   copyPreviousDayEntriesAction,
 } from '@/app/actions';
-import RefreshOnActionComplete from '@/components/RefreshOnActionComplete';
 import DataList from '@/components/primitives/DataList';
 import ListRow from '@/components/primitives/ListRow';
 import Grip from '@/components/icons/Grip';
@@ -194,12 +193,10 @@ export default function EntriesList({
   /** Preferred (Phase 2.2): day row id for reorder (1 RPC) */
   dayId: string;
 }) {
+  // Seed from server props on mount only. After that, local state is the
+  // source of truth — live updates arrive via the Realtime event bus.
   const [items, setItems] = useState<Entry[]>(sortByOrdering(entries));
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setItems(sortByOrdering(entries));
-  }, [entries]);
 
   useEffect(() => {
     const unsubscribe = subscribeToEntryAdds((entry) => {
@@ -382,8 +379,6 @@ export default function EntriesList({
             >
               Copy previous day →
             </button>
-
-            <RefreshOnActionComplete debounceMs={250} />
           </form>
         </li>
       </DataList>
@@ -675,28 +670,16 @@ const AutoSaveQtyForm = forwardRef<
 
   const { schedule: scheduleDebounced, cancel: cancelDebounce } = useDebouncedCallback(600);
 
-  // Don't let external prop changes overwrite the user's active input
-  const focusedRef = useRef(false);
-
   // Prevent a late error handler from “rolling back” a newer qty.
   const lastOpRef = useRef<string | null>(null);
 
-  // Track the last qty we consider "committed" (best-effort).
+  // Track the last qty we consider “committed” (best-effort).
   const lastGoodQtyRef = useRef<number | null>(null);
 
   const parseQty = useCallback((v: string): number | null => {
     const n = parseFloat(v);
     return Number.isFinite(n) && n >= 0 ? n : null;
   }, []);
-
-  // Keep input in sync when server refresh/realtime replaces props,
-  // but not while the user is actively editing
-  useEffect(() => {
-    if (focusedRef.current) return;
-    setVal(initialQty);
-    const n = parseQty(initialQty);
-    if (n != null) lastGoodQtyRef.current = n;
-  }, [initialQty, parseQty]);
 
   const sendQty = useCallback(
     async (opId: string, qty: number, prevGood: number | null) => {
@@ -831,7 +814,6 @@ const AutoSaveQtyForm = forwardRef<
             min="0"
             inputMode="decimal"
             value={val}
-            onFocus={() => { focusedRef.current = true; }}
             onInput={(e) => {
               const nextStr = e.currentTarget.value;
               setVal(nextStr);
@@ -844,7 +826,6 @@ const AutoSaveQtyForm = forwardRef<
               }
             }}
             onBlur={(e) => {
-              focusedRef.current = false;
               const n = parseQty(e.currentTarget.value);
               if (n != null) {
                 commit(n, 'immediate');

@@ -102,7 +102,7 @@ export default function RealtimeStatusToast() {
       // Use a longer delay if we're inside a visibility grace period
       // (i.e. the page just returned from background on mobile).
       const remaining = Math.max(0, graceUntil - Date.now());
-      const delay = Math.max(500, remaining);
+      const delay = Math.max(4000, remaining);
       showTimeoutRef.current = setTimeout(() => {
         setVisible(true);
         showTimeoutRef.current = null;

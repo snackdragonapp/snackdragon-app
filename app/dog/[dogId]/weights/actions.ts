@@ -77,9 +77,7 @@ export async function createWeightAction(formData: FormData) {
   });
   if (error) throw new Error(error.message);
 
-  // Weights affect charts; day pages may show related context later too.
   revalidatePath('/dog/[dogId]/charts', 'page');
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
 
   if (intent === 'create_return' && next) {
     revalidatePath(next);
@@ -139,7 +137,6 @@ export async function updateWeightAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath('/dog/[dogId]/charts', 'page');
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
   revalidatePath('/dog/[dogId]/weights', 'page');
 }
 
@@ -157,6 +154,5 @@ export async function deleteWeightAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath('/dog/[dogId]/charts', 'page');
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
   revalidatePath('/dog/[dogId]/weights', 'page');
 }

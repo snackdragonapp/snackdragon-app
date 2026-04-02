@@ -11,36 +11,6 @@ function newOpId(): string {
   return crypto.randomUUID();
 }
 
-export async function toggleEntryStatusAction(formData: FormData) {
-  const supabase = await createClient();
-  const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
-  if (claimsErr) throw new Error(claimsErr.message);
-  const userId = claimsData?.claims?.sub ?? null;
-  if (!userId) throw new Error('Must be signed in');
-
-  const entryId = String(formData.get('entry_id') ?? '');
-  const nextStatus = String(formData.get('next_status') ?? 'planned');
-  if (!entryId) throw new Error('Missing entry_id');
-  if (nextStatus !== 'planned' && nextStatus !== 'eaten') throw new Error('Invalid status');
-
-  // RLS ensures you can only update entries whose day belongs to you
-  const opId = newOpId();
-
-  const { error } = await supabase
-    .from('entries')
-    .update({
-      status: nextStatus,
-      client_op_id: opId,
-    })
-    .eq('id', entryId);
-
-  if (error) throw new Error(error.message);
-
-  // ✅ FIX: Invalidate day and charts so navigation back shows correct state
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
-  revalidatePath('/dog/[dogId]/charts', 'page');
-}
-
 export async function deleteEntryAction(formData: FormData) {
   const supabase = await createClient();
   const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims();
@@ -329,7 +299,6 @@ export async function copyPreviousDayEntriesAction(formData: FormData) {
     if (insErr) throw new Error(insErr.message);
   }
 
-  // ✅ FIX: Invalidate
-  revalidatePath('/dog/[dogId]/day/[ymd]', 'page');
+  // Day page is optimistic + Realtime; only revalidate charts.
   revalidatePath('/dog/[dogId]/charts', 'page');
 }

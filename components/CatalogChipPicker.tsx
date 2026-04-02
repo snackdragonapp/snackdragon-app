@@ -42,13 +42,17 @@ export default function CatalogChipPicker({
 }) {
   const [q, setQ] = useState('');
 
+  // Seed from server props on mount only. Chip ordering updates on page
+  // navigation (component remounts), but stays stable during the session.
+  const [stableItems] = useState(items);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter((it) =>
+    if (!s) return stableItems;
+    return stableItems.filter((it) =>
       it.name.toLowerCase().includes(s) || it.unit.toLowerCase().includes(s)
     );
-  }, [q, items]);
+  }, [q, stableItems]);
 
   // Show only the top N (by the server’s ordering) when q is empty.
   const display = q.trim() ? filtered : filtered.slice(0, visibleLimit);
