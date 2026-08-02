@@ -1,7 +1,7 @@
 // components/CatalogChipPicker.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { uuid } from '@/lib/uuid';
 import { registerPendingOp, completeOp, ackOp } from '@/components/realtime/opRegistry';
 import {
@@ -42,9 +42,19 @@ export default function CatalogChipPicker({
 }) {
   const [q, setQ] = useState('');
 
-  // Seed from server props on mount only. Chip ordering updates on page
-  // navigation (component remounts), but stays stable during the session.
-  const [stableItems] = useState(items);
+  // Follow server props (so catalog changes appear after a refresh), but
+  // keep this session's chip ordering stable to avoid mid-tap reshuffles:
+  // ids keep the position they had when first seen.
+  const orderRef = useRef<Map<string, number>>(new Map());
+  const stableItems = useMemo(() => {
+    const order = orderRef.current;
+    for (const it of items) {
+      if (!order.has(it.id)) order.set(it.id, order.size);
+    }
+    return [...items].sort(
+      (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)
+    );
+  }, [items]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();

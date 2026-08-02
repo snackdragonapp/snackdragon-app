@@ -10,7 +10,10 @@ import {
   ackOpByEntryId,
 } from '@/components/realtime/opRegistry';
 import type { Entry } from '@/components/EntriesList';
-import { emitEntryRealtimeChange } from '@/components/EntriesList';
+import {
+  emitEntryRealtimeChange,
+  emitEntriesReconcile,
+} from '@/components/EntriesList';
 import {
   validateRealtimePayload,
   type RowWithClientOpId,
@@ -211,6 +214,32 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       setRtState(s);
     };
 
+    // postgres_changes has no replay: any event fired while our socket was
+    // down (sleep, background, network switch) is gone. Fetch the current
+    // snapshot and let EntriesList merge it (local pending ops win).
+    let reconcileInFlight = false;
+    const fetchAndReconcile = async () => {
+      if (!mounted || reconcileInFlight) return;
+      reconcileInFlight = true;
+      try {
+        const { data, error } = await supabase
+          .from('entries')
+          .select(
+            'id,name,unit,qty,kcal_snapshot,status,created_at,kcal_per_unit_snapshot,ordering'
+          )
+          .eq('day_id', dayId);
+        if (!mounted || error || !data) return;
+        const entries: Entry[] = [];
+        for (const row of data) {
+          const entry = rowToEntry(row as RowWithClientOpId);
+          if (entry) entries.push(entry);
+        }
+        emitEntriesReconcile(entries);
+      } finally {
+        reconcileInFlight = false;
+      }
+    };
+
     const subscribe = () => {
       if (!mounted) return;
       if (retryTimer) { window.clearTimeout(retryTimer); retryTimer = null; }
@@ -239,6 +268,8 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
         if (!mounted) return;
         if (status === 'SUBSCRIBED') {
           setStateTracked('live');
+          // Catch up on anything that happened while we weren't subscribed.
+          void fetchAndReconcile();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setStateTracked('error');
           scheduleRetry();
@@ -260,14 +291,20 @@ export default function DayEntriesRealtime({ dayId }: { dayId: string }) {
       subscribe();
     };
 
-    // Reconnect when app becomes visible, but only if the connection is unhealthy.
-    // A healthy channel stays connected while backgrounded; tearing it down
-    // unnecessarily causes a brief 'connecting' state that can trigger the toast.
+    // On foreground: always reconcile (events may have been missed while
+    // hidden even if the socket survived), and resubscribe unless the
+    // connection is verifiably healthy. `currentState === 'live'` alone is
+    // not enough — a socket can die while backgrounded without any status
+    // callback firing, leaving a stale 'live'.
     const handleVisibilityChange = () => {
       if (!mounted || !hasUser) return;
       if (document.visibilityState !== 'visible') return;
-      if (currentState === 'live') return; // already connected, nothing to do
 
+      void fetchAndReconcile();
+
+      if (currentState === 'live' && supabase.realtime.isConnected()) {
+        return; // healthy connection; snapshot above covers any gap
+      }
       subscribe();
     };
 

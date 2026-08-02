@@ -42,6 +42,7 @@ import Trash from '@/components/icons/Trash';
 import {
   registerPendingOp,
   hasSavingOpForEntry,
+  hasPendingOpForEntry,
   subscribeToPendingOps,
   ackOp,
   completeOp,
@@ -100,6 +101,30 @@ export function subscribeToEntryRealtimeChanges(
 export function emitEntryRealtimeChange(change: EntryRealtimeChange): void {
   for (const listener of entryRealtimeListeners) {
     listener(change);
+  }
+}
+
+/* ---------- Reconcile bus (full snapshot from DayEntriesRealtime) ----------
+ * Realtime postgres_changes never replays events missed while a socket was
+ * down (backgrounded tab, device sleep, network switch). After every
+ * (re)subscribe and on foreground we fetch the day's entries and emit them
+ * here so the list can heal itself. */
+
+type EntriesReconcileListener = (entries: Entry[]) => void;
+const entriesReconcileListeners = new Set<EntriesReconcileListener>();
+
+export function subscribeToEntriesReconcile(
+  listener: EntriesReconcileListener
+): () => void {
+  entriesReconcileListeners.add(listener);
+  return () => {
+    entriesReconcileListeners.delete(listener);
+  };
+}
+
+export function emitEntriesReconcile(entries: Entry[]): void {
+  for (const listener of entriesReconcileListeners) {
+    listener(entries);
   }
 }
 
@@ -201,6 +226,33 @@ export default function EntriesList({
   useEffect(() => {
     const unsubscribe = subscribeToEntryAdds((entry) => {
       setItems((prev) => [...prev, entry]);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Heal from a full server snapshot (after resubscribe/foreground).
+  // Server rows win, except entries with an in-flight optimistic op:
+  // those keep their local version until the op settles.
+  useEffect(() => {
+    const unsubscribe = subscribeToEntriesReconcile((serverEntries) => {
+      setItems((prev) => {
+        const merged = serverEntries.map((se) => {
+          if (!hasPendingOpForEntry(se.id)) return se;
+          const local = prev.find((p) => p.id === se.id);
+          return local ?? se;
+        });
+        // Keep local-only entries that are still pending (optimistic adds
+        // whose insert may not be visible in the snapshot yet).
+        for (const p of prev) {
+          if (
+            !merged.some((m) => m.id === p.id) &&
+            hasPendingOpForEntry(p.id)
+          ) {
+            merged.push(p);
+          }
+        }
+        return sortByOrdering(merged);
+      });
     });
     return unsubscribe;
   }, []);
