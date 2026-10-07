@@ -267,6 +267,8 @@ type LinkedChartsProps = {
   defaultIndex: number;
   locked: boolean;
   onActive: (ymd: string) => void;
+  /** Touch scrubbing: Recharts does not sync touch between charts, so the parent moves the other cursor. */
+  onTouch: (ymd: string) => void;
   onLeave: () => void;
   onPick: (ymd: string | undefined) => void;
   onRelease: () => void;
@@ -284,6 +286,7 @@ const LinkedCharts = memo(function LinkedCharts({
   defaultIndex,
   locked,
   onActive,
+  onTouch,
   onLeave,
   onPick,
   onRelease,
@@ -303,6 +306,13 @@ const LinkedCharts = memo(function LinkedCharts({
     [ymdAt, onActive]
   );
   const handleClick = useCallback((s: HoverState) => onPick(ymdAt(s)), [ymdAt, onPick]);
+  const handleTouch = useCallback(
+    (s: HoverState) => {
+      const ymd = ymdAt(s);
+      if (ymd) onTouch(ymd);
+    },
+    [ymdAt, onTouch]
+  );
 
   const tickStyle = { fontSize: 12, fill: AXIS_TEXT };
 
@@ -332,7 +342,7 @@ const LinkedCharts = memo(function LinkedCharts({
                 syncId={SYNC_ID}
                 margin={CHART_MARGIN}
                 onMouseMove={handleMove}
-                onTouchMove={handleMove}
+                onTouchMove={handleTouch}
                 onMouseLeave={onLeave}
                 onClick={handleClick}
               >
@@ -406,7 +416,7 @@ const LinkedCharts = memo(function LinkedCharts({
               syncId={SYNC_ID}
               margin={CHART_MARGIN}
               onMouseMove={handleMove}
-              onTouchMove={handleMove}
+              onTouchMove={handleTouch}
               onMouseLeave={onLeave}
               onClick={handleClick}
             >
@@ -982,6 +992,13 @@ export default function ChartsClient({
     setHoverYmd(ymd);
   }, []);
   const onLeave = useCallback(() => setRestYmd(hoverRef.current), []);
+  // A finger moves the touched chart's own cursor; setting the resting index
+  // as well moves the other chart's, since that is what it shows when idle.
+  const onTouch = useCallback((ymd: string) => {
+    hoverRef.current = ymd;
+    setHoverYmd(ymd);
+    setRestYmd(ymd);
+  }, []);
   const onEnterArea = useCallback(() => setHovering(true), []);
   const onLeaveArea = useCallback(() => setHovering(false), []);
   const onPick = useCallback((ymd: string | undefined) => {
@@ -1104,6 +1121,7 @@ export default function ChartsClient({
             defaultIndex={defaultIndex}
             locked={locked !== null}
             onActive={onActive}
+            onTouch={onTouch}
             onLeave={onLeave}
             onPick={onPick}
             onRelease={onRelease}
