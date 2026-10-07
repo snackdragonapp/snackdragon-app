@@ -116,6 +116,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
               <div className="text-[11px] leading-snug">
                 For tracking only. Not veterinary advice.
+                {/* Build marker: which commit this deployment was built from. */}
+                <span className="ml-2 text-subtle-foreground" title="Build">
+                  {process.env.NEXT_PUBLIC_BUILD_SHA ?? 'unknown'}
+                </span>
               </div>
             </div>
           </div>

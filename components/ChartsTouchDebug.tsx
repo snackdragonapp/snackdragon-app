@@ -73,6 +73,7 @@ export default function ChartsTouchDebug() {
     for (const t of touchTypes) document.addEventListener(t, onTouch, { capture: true, passive: true });
     for (const t of pointerTypes) document.addEventListener(t, onPointer, { capture: true, passive: true });
 
+    push(`build ${process.env.NEXT_PUBLIC_BUILD_SHA ?? 'unknown'}`);
     push(`ua ${navigator.userAgent}`);
     push(
       `viewport ${window.innerWidth}x${window.innerHeight} dpr=${window.devicePixelRatio} maxTouchPoints=${navigator.maxTouchPoints}`
