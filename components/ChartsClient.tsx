@@ -258,8 +258,8 @@ type LinkedChartsProps = {
   rows: ChartRow[];
   domain: [number, number];
   ticks: XTicks;
-  /** Shown beside the weight title when the window matches no preset. */
-  windowLabel: string | null;
+  /** Small note beside the weight title: pin state, pin hint, or the custom window's dates. */
+  note: string | null;
   series: ChartSeries[];
   showOther: boolean;
   /** Y axes come from the full history so zooming and panning never rescale the charts. */
@@ -277,7 +277,7 @@ const LinkedCharts = memo(function LinkedCharts({
   rows,
   domain,
   ticks,
-  windowLabel,
+  note,
   series,
   showOther,
   weightAxis,
@@ -318,15 +318,13 @@ const LinkedCharts = memo(function LinkedCharts({
         {/* Weight */}
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
           <h2 className="font-semibold text-sm">Weight (kg)</h2>
-          {windowLabel && (
-            <span className="text-xs text-muted-foreground tabular-nums">{windowLabel}</span>
-          )}
+          {note && <span className="text-xs text-muted-foreground tabular-nums">{note}</span>}
         </div>
         {/* The chart containers are absolutely positioned inside their flex
             slots: a percentage height would not resolve against a slot whose
             size comes from flexing in a min-height box, but an absolute
             inset does. */}
-        <div className="relative mt-1 min-h-[150px] flex-[2_1_0%]">
+        <div className="relative mt-2 min-h-[150px] flex-[2_1_0%]">
           {weightAxis ? (
             <div className="absolute inset-0">
             <ResponsiveContainer>
@@ -398,36 +396,10 @@ const LinkedCharts = memo(function LinkedCharts({
           )}
         </div>
 
-        {/* Calories, with the legend sharing the title line */}
-        <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-          <h2 className="font-semibold text-sm">Calories (kcal)</h2>
-          <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            {series.map((s, i) => (
-              <li key={s.key} className="flex items-center gap-1">
-                <span
-                  className="inline-block h-2 w-2 rounded-sm"
-                  style={{ background: SERIES_COLORS[i] }}
-                />
-                {s.label}
-              </li>
-            ))}
-            {showOther && (
-              <li className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: OTHER_COLOR }} />
-                Other
-              </li>
-            )}
-            <li className="flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3.5" style={{ background: INK }} />
-              7-day avg
-            </li>
-            <li className="flex items-center gap-1">
-              <span className="inline-block w-3.5 border-t-2 border-dashed" style={{ borderColor: GOAL_COLOR }} />
-              Goal
-            </li>
-          </ul>
-        </div>
-        <div className="relative mt-1 min-h-[180px] flex-[3_1_0%]">
+        {/* Calories. No legend: the readout's chips name each colour on hover,
+            and the two lines are keyed beside their values in the stats row. */}
+        <h2 className="mt-6 font-semibold text-sm">Calories (kcal)</h2>
+        <div className="relative mt-2 min-h-[180px] flex-[3_1_0%]">
           <div className="absolute inset-0">
           <ResponsiveContainer>
             <ComposedChart
@@ -646,7 +618,7 @@ function Readout({
         </Link>
       </div>
 
-      <div className="mt-0.5 grid grid-cols-2 gap-x-4 text-sm sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-x-4 text-sm sm:grid-cols-3">
         <div className="truncate">
           <span className="text-muted-foreground">Weight </span>
           {row.weight !== null ? (
@@ -668,10 +640,23 @@ function Readout({
             <span className="text-subtle-foreground">—</span>
           )}
           {row.goal !== null && (
-            <span className="text-subtle-foreground tabular-nums"> / {fmtKcal(row.goal)} kcal</span>
+            <span className="text-subtle-foreground tabular-nums">
+              {' / '}
+              <span
+                className="mr-1 inline-block w-3.5 border-t-2 border-dashed align-middle"
+                style={{ borderColor: GOAL_COLOR }}
+                aria-label="goal"
+              />
+              {fmtKcal(row.goal)} kcal
+            </span>
           )}
         </div>
         <div className="truncate">
+          <span
+            className="mr-1.5 inline-block h-0.5 w-3.5 align-middle"
+            style={{ background: INK }}
+            aria-hidden
+          />
           <span className="text-muted-foreground">7-day avg </span>
           {row.avg7 !== null ? (
             <span className="font-medium tabular-nums">{fmtKcal(row.avg7)}</span>
@@ -684,7 +669,7 @@ function Readout({
       {/* Exactly two lines (h-11); packing decides what fits, overflow is a safety net. */}
       <ul
         ref={listRef}
-        className="mt-1.5 flex h-11 flex-wrap content-start gap-x-3 gap-y-1 overflow-hidden text-sm"
+        className="mt-2 flex h-11 flex-wrap content-start gap-x-3 gap-y-1 overflow-hidden text-sm"
       >
         {row.items.length === 0 ? (
           <li className="text-subtle-foreground">Nothing logged this day.</li>
@@ -745,7 +730,13 @@ export default function ChartsClient({
   const [view, setView] = useState<View | null>(() =>
     viewFromParams(searchParams.get('from'), searchParams.get('to'), rows)
   );
+  // The hovered day is kept when the pointer leaves the charts, so the readout
+  // (and "Open day") stay on what you were looking at. `restYmd` is where the
+  // charts' cursor rests once the pointer has left; `hovering` drives the hint.
   const [hoverYmd, setHoverYmd] = useState<string | null>(null);
+  const [restYmd, setRestYmd] = useState<string | null>(null);
+  const [hovering, setHovering] = useState(false);
+  const hoverRef = useRef<string | null>(null);
   const [lockedYmd, setLockedYmd] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
 
@@ -1006,8 +997,13 @@ export default function ChartsClient({
     [n, stopZoomAnim]
   );
 
-  const onActive = useCallback((ymd: string) => setHoverYmd(ymd), []);
-  const onLeave = useCallback(() => setHoverYmd(null), []);
+  const onActive = useCallback((ymd: string) => {
+    hoverRef.current = ymd;
+    setHoverYmd(ymd);
+  }, []);
+  const onLeave = useCallback(() => setRestYmd(hoverRef.current), []);
+  const onEnterArea = useCallback(() => setHovering(true), []);
+  const onLeaveArea = useCallback(() => setHovering(false), []);
   const onPick = useCallback((ymd: string | undefined) => {
     if (ymd && !dragMovedRef.current) setLockedYmd(ymd);
   }, []);
@@ -1046,8 +1042,10 @@ export default function ChartsClient({
   // A pin or hover that fell outside the current window is ignored rather than cleared.
   const locked = inWindow(lockedYmd) ? lockedYmd : null;
   const hover = inWindow(hoverYmd) ? hoverYmd : null;
+  const rest = inWindow(restYmd) ? restYmd : null;
   const activeIdx = locked !== null ? fullIndex.get(locked)! : hover !== null ? fullIndex.get(hover)! : to;
-  const defaultIndex = (locked !== null ? fullIndex.get(locked)! : to) - sliceFrom;
+  const defaultIndex =
+    (locked !== null ? fullIndex.get(locked)! : rest !== null ? fullIndex.get(rest)! : to) - sliceFrom;
 
   const presetActive = (days: number | null) =>
     days === null
@@ -1080,9 +1078,14 @@ export default function ChartsClient({
     </div>
   );
 
-  const windowLabel = customWindow
-    ? `${fmtMediumDate(rows[from].ymd)} – ${fmtMediumDate(rows[to].ymd)}`
-    : null;
+  const note =
+    locked !== null
+      ? 'pinned · click to release'
+      : hovering
+        ? 'click to pin'
+        : customWindow
+          ? `${fmtMediumDate(rows[from].ymd)} – ${fmtMediumDate(rows[to].ymd)}`
+          : null;
 
   return (
     <>
@@ -1094,7 +1097,6 @@ export default function ChartsClient({
           row={rows[activeIdx]}
           prevWeight={prevWeights[activeIdx]}
         />
-        <div className="my-3 border-t" />
         {/* At least the rest of the viewport below this point (see .charts-fit);
             a minimum rather than a height, so when the screen is shorter than
             the plots' own floors the box grows and the page scrolls instead of
@@ -1102,7 +1104,9 @@ export default function ChartsClient({
         <div
           ref={gestureRef}
           onPointerDown={onPointerDown}
-          className="charts-fit relative flex select-none flex-col"
+          onMouseEnter={onEnterArea}
+          onMouseLeave={onLeaveArea}
+          className="charts-fit relative mt-6 flex select-none flex-col"
           style={{
             cursor: view ? 'grab' : undefined,
             minHeight: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
@@ -1112,7 +1116,7 @@ export default function ChartsClient({
             rows={visible}
             domain={domain}
             ticks={ticks}
-            windowLabel={locked !== null ? 'Pinned · tap to release' : windowLabel}
+            note={note}
             series={series}
             showOther={showOther}
             weightAxis={weightAxis}
