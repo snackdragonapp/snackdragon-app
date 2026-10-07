@@ -55,7 +55,6 @@
   --my-color-alert-error-fg:        #991b1b;  /* red-800   */
 
   /* Charts */
-  --my-color-chart-goal-line: #6b7280;  /* gray-500 */
   --my-color-chart-other:     #9ca3af;  /* gray-400: foods folded into "Other" */
   /* Categorical series (validated for CVD separation on the light card surface) */
   --my-color-chart-1: #2a78d6;  /* blue */
@@ -123,7 +122,6 @@
     --my-color-alert-error-fg:        #fecaca; /* red-200  */
 
     /* Charts */
-    --my-color-chart-goal-line: #94a3b8; /* slate-400 */
     --my-color-chart-other:     #71717a; /* zinc-500 */
     /* Same six hues re-stepped for the dark card surface */
     --my-color-chart-1: #3987e5;
@@ -208,7 +206,6 @@ body {
   --color-alert-error-border: var(--my-color-alert-error-border);
   --color-alert-error-fg: var(--my-color-alert-error-fg);
 
-  --color-chart-goal-line: var(--my-color-chart-goal-line);
   --color-chart-other: var(--my-color-chart-other);
   --color-chart-1: var(--my-color-chart-1);
   --color-chart-2: var(--my-color-chart-2);

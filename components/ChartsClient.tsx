@@ -41,7 +41,6 @@ const SERIES_COLORS = [
   'var(--color-chart-6)',
 ];
 const OTHER_COLOR = 'var(--color-chart-other)';
-const GOAL_COLOR = 'var(--color-chart-goal-line)';
 const INK = 'var(--foreground)';
 const SURFACE = 'var(--color-card)';
 const GRID = 'var(--color-border)';
@@ -468,18 +467,8 @@ const LinkedCharts = memo(function LinkedCharts({
                   isAnimationActive={false}
                 />
               )}
-              <Line
-                type="stepAfter"
-                dataKey="goal"
-                stroke={GOAL_COLOR}
-                strokeWidth={2}
-                strokeDasharray="6 4"
-                dot={false}
-                activeDot={false}
-                connectNulls
-                isAnimationActive={false}
-              />
-              {/* Drawn last so it stays visible where it coincides with the goal. */}
+              {/* The goal is read from the readout rather than drawn: at the
+                  current goal it sits under the 7-day average anyway. */}
               <Line
                 type="monotone"
                 dataKey="avg7"
@@ -640,15 +629,7 @@ function Readout({
             <span className="text-subtle-foreground">—</span>
           )}
           {row.goal !== null && (
-            <span className="text-subtle-foreground tabular-nums">
-              {' / '}
-              <span
-                className="mr-1 inline-block w-3.5 border-t-2 border-dashed align-middle"
-                style={{ borderColor: GOAL_COLOR }}
-                aria-label="goal"
-              />
-              {fmtKcal(row.goal)} kcal
-            </span>
+            <span className="text-subtle-foreground tabular-nums"> / {fmtKcal(row.goal)} kcal</span>
           )}
         </div>
         <div className="truncate">
@@ -788,7 +769,6 @@ export default function ChartsClient({
     const vals: number[] = [];
     for (const r of rows) {
       if (r.total > 0) vals.push(r.total);
-      if (r.goal !== null) vals.push(r.goal);
       if (r.avg7 !== null) vals.push(r.avg7);
     }
     return makeNiceAxis(vals, { includeZero: true });
