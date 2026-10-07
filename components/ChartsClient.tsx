@@ -184,16 +184,25 @@ function pickTicks(rows: ChartRow[], from: number, to: number): XTicks {
 // horizontal plot area of the wrapper element is the same for both).
 // ───────────────────────────────────────────────────────────────
 
+/** The plot's horizontal extent in client coordinates (the element may carry padding). */
+function plotBox(el: HTMLElement): { left: number; width: number } {
+  const rect = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padR = parseFloat(cs.paddingRight) || 0;
+  const left = rect.left + padL + CHART_MARGIN.left + Y_AXIS_WIDTH;
+  const width = rect.width - padL - padR - CHART_MARGIN.left - Y_AXIS_WIDTH - CHART_MARGIN.right;
+  return { left, width: Math.max(1, width) };
+}
+
 function plotWidthOf(el: HTMLElement): number {
-  const plotLeft = CHART_MARGIN.left + Y_AXIS_WIDTH;
-  return Math.max(1, el.getBoundingClientRect().width - plotLeft - CHART_MARGIN.right);
+  return plotBox(el).width;
 }
 
 /** Horizontal position of a client x inside the plot, 0 = left edge, 1 = right edge. */
 function fractionAt(el: HTMLElement, clientX: number): number {
-  const rect = el.getBoundingClientRect();
-  const plotLeft = CHART_MARGIN.left + Y_AXIS_WIDTH;
-  return clamp((clientX - rect.left - plotLeft) / plotWidthOf(el), 0, 1);
+  const b = plotBox(el);
+  return clamp((clientX - b.left) / b.width, 0, 1);
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -921,30 +930,22 @@ export default function ChartsClient({
         f: fractionAt(el, (a.clientX + b.clientX) / 2),
       };
     };
-    // The charts area sets touch-action: none, so the browser never claims a
-    // gesture partway through (which left two-finger moves half-delivered).
-    // In exchange, a one-finger vertical drag scrolls the page by hand.
-    let lastY: number | null = null;
+    // Touch events are delivered to the element each finger landed on, so a
+    // second finger that lands in the card padding or page margin would never
+    // reach a listener on the charts. Listen on the document instead and take
+    // any two-finger gesture that has at least one finger over the charts.
+    // One finger is left to Recharts (scrub); it never scrolls the page here.
+    const touchesHere = (e: TouchEvent) =>
+      Array.from(e.touches).some((t) => el.contains(t.target as Node));
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        lastY = e.touches[0].clientY;
-        return;
-      }
-      if (e.touches.length !== 2) return;
+      if (e.touches.length !== 2 || !touchesHere(e)) return;
       e.preventDefault();
       e.stopPropagation();
       stopZoomAnim();
       pinch = { ...touchInfo(e), view: viewRef.current };
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        // One finger: Recharts scrubs (the event continues to it); we scroll.
-        const y = e.touches[0].clientY;
-        if (lastY !== null && !pinch) window.scrollBy(0, lastY - y);
-        lastY = y;
-        return;
-      }
-      if (e.touches.length !== 2) return;
+      if (e.touches.length !== 2 || !touchesHere(e)) return;
       e.preventDefault();
       e.stopPropagation();
       if (!pinch) {
@@ -956,21 +957,20 @@ export default function ChartsClient({
     };
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) pinch = null;
-      lastY = e.touches.length === 1 ? e.touches[0].clientY : null;
     };
 
     el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
-    el.addEventListener('touchend', onTouchEnd, { capture: true });
-    el.addEventListener('touchcancel', onTouchEnd, { capture: true });
+    document.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+    document.addEventListener('touchend', onTouchEnd, { capture: true });
+    document.addEventListener('touchcancel', onTouchEnd, { capture: true });
     return () => {
       stopZoomAnim();
       el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchstart', onTouchStart, { capture: true });
-      el.removeEventListener('touchmove', onTouchMove, { capture: true });
-      el.removeEventListener('touchend', onTouchEnd, { capture: true });
-      el.removeEventListener('touchcancel', onTouchEnd, { capture: true });
+      document.removeEventListener('touchstart', onTouchStart, { capture: true });
+      document.removeEventListener('touchmove', onTouchMove, { capture: true });
+      document.removeEventListener('touchend', onTouchEnd, { capture: true });
+      document.removeEventListener('touchcancel', onTouchEnd, { capture: true });
     };
   }, [n, showHint, stopZoomAnim]);
 
@@ -1119,7 +1119,10 @@ export default function ChartsClient({
           onPointerDown={onPointerDown}
           onMouseEnter={onEnterArea}
           onMouseLeave={onLeaveArea}
-          className="charts-fit relative mt-6 flex select-none flex-col"
+          // Negative margins stretch the gesture zone across the card padding and
+          // page margin (the box stays transparent), so a finger landing there
+          // still counts as "over the charts" and gets no browser touch action.
+          className="charts-fit relative -mx-10 mt-6 flex select-none flex-col px-10"
           style={{
             cursor: view ? 'grab' : undefined,
             touchAction: 'none',
