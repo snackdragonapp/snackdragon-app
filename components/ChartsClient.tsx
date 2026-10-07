@@ -47,7 +47,6 @@ const SURFACE = 'var(--color-card)';
 const GRID = 'var(--color-border)';
 const AXIS_TEXT = 'var(--color-subtle-foreground)';
 
-const SYNC_ID = 'dog-charts';
 const Y_AXIS_WIDTH = 48;
 const CHART_MARGIN = { top: 8, right: 12, bottom: 0, left: 0 };
 
@@ -260,8 +259,6 @@ const noLabel = () => '';
 // zooming, and there are no per-day seams to anti-alias into stripes.
 // ───────────────────────────────────────────────────────────────
 
-type HoverState = { activeTooltipIndex?: number | string | null };
-
 type LinkedChartsProps = {
   /** Rows covering the window plus one on each side, so edge days are drawn in full. */
   rows: ChartRow[];
@@ -274,14 +271,13 @@ type LinkedChartsProps = {
   /** Y axes come from the full history so zooming and panning never rescale the charts. */
   weightAxis: AxisConfig | null;
   kcalAxis: AxisConfig | null;
+  /**
+   * The day (index into `rows`) both cursors show. The charts take no pointer
+   * input of their own (see .recharts-wrapper in globals.css): the parent turns
+   * mouse and touch positions into a day and hands it down, so the two charts
+   * can never disagree and no Recharts sync state is involved.
+   */
   defaultIndex: number;
-  locked: boolean;
-  onActive: (ymd: string) => void;
-  /** Touch scrubbing: Recharts does not sync touch between charts, so the parent moves the other cursor. */
-  onTouch: (ymd: string) => void;
-  onLeave: () => void;
-  onPick: (ymd: string | undefined) => void;
-  onRelease: () => void;
 };
 
 const LinkedCharts = memo(function LinkedCharts({
@@ -294,46 +290,17 @@ const LinkedCharts = memo(function LinkedCharts({
   weightAxis,
   kcalAxis,
   defaultIndex,
-  locked,
-  onActive,
-  onTouch,
-  onLeave,
-  onPick,
-  onRelease,
 }: LinkedChartsProps) {
-  const ymdAt = useCallback(
-    (s: HoverState) => {
-      const idx = Number(s.activeTooltipIndex);
-      return Number.isInteger(idx) ? rows[idx]?.ymd : undefined;
-    },
-    [rows]
-  );
-  const handleMove = useCallback(
-    (s: HoverState) => {
-      const ymd = ymdAt(s);
-      if (ymd) onActive(ymd);
-    },
-    [ymdAt, onActive]
-  );
-  const handleClick = useCallback((s: HoverState) => onPick(ymdAt(s)), [ymdAt, onPick]);
-  const handleTouch = useCallback(
-    (s: HoverState) => {
-      const ymd = ymdAt(s);
-      if (ymd) onTouch(ymd);
-    },
-    [ymdAt, onTouch]
-  );
-
   const tickStyle = { fontSize: 12, fill: AXIS_TEXT };
 
   // The two plots share whatever height the parent gives, 40/60, with floors
-  // below which the page scrolls instead of squashing them.
+  // below which the page scrolls instead of squashing them. Each plot slot
+  // owns its touches (touch-action: none) and reaches sideways over the card
+  // padding and page margin; the titles between and around them keep the
+  // browser's default touch handling, so a finger there scrolls the page.
   return (
-    <div className="flex flex-1 flex-col" onClick={locked ? onRelease : undefined}>
-      <div
-        className="flex flex-1 flex-col"
-        style={{ pointerEvents: locked ? 'none' : 'auto' }}
-      >
+    <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col">
         {/* Weight */}
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
           <h2 className="font-semibold text-sm">Weight (kg)</h2>
@@ -343,19 +310,14 @@ const LinkedCharts = memo(function LinkedCharts({
             slots: a percentage height would not resolve against a slot whose
             size comes from flexing in a min-height box, but an absolute
             inset does. */}
-        <div className="relative mt-2 min-h-[150px] flex-[2_1_0%]">
+        <div
+          className="relative -mx-10 mt-2 min-h-[150px] flex-[2_1_0%] px-10"
+          style={{ touchAction: 'none' }}
+        >
           {weightAxis ? (
-            <div className="absolute inset-0">
+            <div className="absolute inset-y-0 left-10 right-10">
             <ResponsiveContainer>
-              <ComposedChart
-                data={rows}
-                syncId={SYNC_ID}
-                margin={CHART_MARGIN}
-                onMouseMove={handleMove}
-                onTouchMove={handleTouch}
-                onMouseLeave={onLeave}
-                onClick={handleClick}
-              >
+              <ComposedChart data={rows} margin={CHART_MARGIN} accessibilityLayer={false}>
                 <CartesianGrid stroke={GRID} />
                 {/* Same ticks as the chart below (they drive the grid), but no labels:
                     the calories chart carries the date labels for both. */}
@@ -418,18 +380,13 @@ const LinkedCharts = memo(function LinkedCharts({
         {/* Calories. No legend: the readout's chips name each colour on hover,
             and the two lines are keyed beside their values in the stats row. */}
         <h2 className="mt-6 font-semibold text-sm">Calories (kcal)</h2>
-        <div className="relative mt-2 min-h-[180px] flex-[3_1_0%]">
-          <div className="absolute inset-0">
+        <div
+          className="relative -mx-10 mt-2 min-h-[180px] flex-[3_1_0%] px-10"
+          style={{ touchAction: 'none' }}
+        >
+          <div className="absolute inset-y-0 left-10 right-10">
           <ResponsiveContainer>
-            <ComposedChart
-              data={rows}
-              syncId={SYNC_ID}
-              margin={CHART_MARGIN}
-              onMouseMove={handleMove}
-              onTouchMove={handleTouch}
-              onMouseLeave={onLeave}
-              onClick={handleClick}
-            >
+            <ComposedChart data={rows} margin={CHART_MARGIN} accessibilityLayer={false}>
               <CartesianGrid stroke={GRID} />
               <XAxis
                 dataKey="i"
@@ -737,12 +694,9 @@ export default function ChartsClient({
     viewFromParams(searchParams.get('from'), searchParams.get('to'), rows)
   );
   // The hovered day is kept when the pointer leaves the charts, so the readout
-  // (and "Open day") stay on what you were looking at. `restYmd` is where the
-  // charts' cursor rests once the pointer has left; `hovering` drives the hint.
+  // (and "Open day") stay on what you were looking at; `hovering` drives the hint.
   const [hoverYmd, setHoverYmd] = useState<string | null>(null);
-  const [restYmd, setRestYmd] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
-  const hoverRef = useRef<string | null>(null);
   const [lockedYmd, setLockedYmd] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
 
@@ -834,6 +788,24 @@ export default function ChartsClient({
   // ── Fit the charts to the viewport: measure where they start (the readout
   // above them changes height) and let CSS take the rest of the screen. ──
   const gestureRef = useRef<HTMLDivElement>(null);
+
+  // The day under a client x, from the plot's geometry and the current domain.
+  const ymdAtClientX = useCallback(
+    (clientX: number): string | null => {
+      const el = gestureRef.current;
+      if (!el || n === 0) return null;
+      const f = fractionAt(el, clientX);
+      const x = domain[0] + f * (domain[1] - domain[0]);
+      return rows[clamp(Math.round(x), 0, n - 1)]?.ymd ?? null;
+    },
+    [domain, n, rows]
+  );
+  // The touch listeners are bound once; they read the latest mapping through a ref.
+  const ymdAtRef = useRef(ymdAtClientX);
+  useEffect(() => {
+    ymdAtRef.current = ymdAtClientX;
+  }, [ymdAtClientX]);
+
   const [chartsTop, setChartsTop] = useState<number | null>(null);
   useEffect(() => {
     const el = gestureRef.current;
@@ -947,7 +919,19 @@ export default function ChartsClient({
     const dbg = (s: string) => window.__chartsTouchLog?.(s);
     const fmtView = (v: View | null) =>
       v ? `start=${v.start.toFixed(2)} len=${v.len.toFixed(2)}` : 'all';
+    // One finger over the charts scrubs: the day under it becomes the hover.
+    const scrub = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!pinch && el.contains(t.target as Node)) {
+        const ymd = ymdAtRef.current(t.clientX);
+        if (ymd) setHoverYmd(ymd);
+      }
+    };
     const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        scrub(e);
+        return;
+      }
       if (e.touches.length !== 2) return;
       if (!touchesHere(e)) {
         dbg('  gesture: touchstart n=2 ignored (no finger over charts)');
@@ -960,6 +944,10 @@ export default function ChartsClient({
       dbg(`  gesture: pinch start dist=${pinch.dist.toFixed(1)} f=${pinch.f.toFixed(3)} view ${fmtView(pinch.view)}`);
     };
     const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        scrub(e);
+        return;
+      }
       if (e.touches.length !== 2) return;
       if (!touchesHere(e)) {
         dbg('  gesture: touchmove n=2 ignored (no finger over charts)');
@@ -1028,26 +1016,24 @@ export default function ChartsClient({
     [n, stopZoomAnim]
   );
 
-  const onActive = useCallback((ymd: string) => {
-    hoverRef.current = ymd;
-    setHoverYmd(ymd);
-  }, []);
-  const onLeave = useCallback(() => setRestYmd(hoverRef.current), []);
-  // A finger moves the touched chart's own cursor; setting the resting index
-  // as well moves the other chart's, since that is what it shows when idle.
-  const onTouch = useCallback((ymd: string) => {
-    hoverRef.current = ymd;
-    setHoverYmd(ymd);
-    setRestYmd(ymd);
-  }, []);
+  // ── Hover and pin, computed from the pointer's x in the plot. ──
+  const onPointerMoveArea = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.pointerType !== 'mouse') return;
+      const ymd = ymdAtClientX(e.clientX);
+      if (ymd) setHoverYmd(ymd);
+    },
+    [ymdAtClientX]
+  );
+  const onClickArea = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (dragMovedRef.current) return; // the click that ends a drag
+      setLockedYmd((cur) => (cur !== null ? null : ymdAtClientX(e.clientX)));
+    },
+    [ymdAtClientX]
+  );
   const onEnterArea = useCallback(() => setHovering(true), []);
   const onLeaveArea = useCallback(() => setHovering(false), []);
-  const onPick = useCallback((ymd: string | undefined) => {
-    if (ymd && !dragMovedRef.current) setLockedYmd(ymd);
-  }, []);
-  const onRelease = useCallback(() => {
-    if (!dragMovedRef.current) setLockedYmd(null);
-  }, []);
 
   const titleRow = (children?: React.ReactNode) => (
     <div className="flex flex-wrap items-center gap-2">
@@ -1080,10 +1066,8 @@ export default function ChartsClient({
   // A pin or hover that fell outside the current window is ignored rather than cleared.
   const locked = inWindow(lockedYmd) ? lockedYmd : null;
   const hover = inWindow(hoverYmd) ? hoverYmd : null;
-  const rest = inWindow(restYmd) ? restYmd : null;
   const activeIdx = locked !== null ? fullIndex.get(locked)! : hover !== null ? fullIndex.get(hover)! : to;
-  const defaultIndex =
-    (locked !== null ? fullIndex.get(locked)! : rest !== null ? fullIndex.get(rest)! : to) - sliceFrom;
+  const defaultIndex = activeIdx - sliceFrom;
 
   const presetActive = (days: number | null) =>
     days === null
@@ -1143,15 +1127,16 @@ export default function ChartsClient({
         <div
           ref={gestureRef}
           onPointerDown={onPointerDown}
+          onPointerMove={onPointerMoveArea}
+          onClick={onClickArea}
           onMouseEnter={onEnterArea}
           onMouseLeave={onLeaveArea}
           // Negative margins stretch the gesture zone across the card padding and
           // page margin (the box stays transparent), so a finger landing there
-          // still counts as "over the charts" and gets no browser touch action.
+          // still counts as "over the charts".
           className="charts-fit relative -mx-10 mt-6 flex select-none flex-col px-10"
           style={{
             cursor: view ? 'grab' : undefined,
-            touchAction: 'none',
             minHeight: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
           }}
         >
@@ -1165,12 +1150,6 @@ export default function ChartsClient({
             weightAxis={weightAxis}
             kcalAxis={kcalAxis}
             defaultIndex={defaultIndex}
-            locked={locked !== null}
-            onActive={onActive}
-            onTouch={onTouch}
-            onLeave={onLeave}
-            onPick={onPick}
-            onRelease={onRelease}
           />
           {hint && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

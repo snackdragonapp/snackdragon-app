@@ -376,13 +376,11 @@ body {
   --charts-bottom: 2.5rem;
 }
 
-/* WebKit on iOS decides from the touched element whether a two-finger gesture
-   may be cancelled by the page, and it ignores touch-action for touches that
-   start on SVG child elements (paths, dots, grid lines) while honouring it on
-   the SVG root. Recharts computes hover from the wrapper's coordinates, not
-   from hits on its shapes, so every shape can ignore pointer events and all
-   touches land on the root instead. */
-.charts-fit svg.recharts-surface * {
+/* The charts take no pointer input: the page computes hover, pin, pan and
+   zoom from pointer positions itself and hands each chart the day to show.
+   This also keeps every touch off SVG content, where WebKit on iOS ignores
+   touch-action and silently takes over two-finger gestures. */
+.charts-fit .recharts-wrapper {
   pointer-events: none;
 }
 
