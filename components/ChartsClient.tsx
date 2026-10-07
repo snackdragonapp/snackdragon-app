@@ -310,9 +310,9 @@ const LinkedCharts = memo(function LinkedCharts({
   // The two plots share whatever height the parent gives, 40/60, with floors
   // below which the page scrolls instead of squashing them.
   return (
-    <div className="flex h-full flex-col" onClick={locked ? onRelease : undefined}>
+    <div className="flex flex-1 flex-col" onClick={locked ? onRelease : undefined}>
       <div
-        className="flex min-h-0 flex-1 flex-col"
+        className="flex flex-1 flex-col"
         style={{ pointerEvents: locked ? 'none' : 'auto', touchAction: 'pan-y' }}
       >
         {/* Weight */}
@@ -1087,16 +1087,17 @@ export default function ChartsClient({
           prevWeight={prevWeights[activeIdx]}
         />
         <div className="my-3 border-t" />
-        {/* Height: the rest of the viewport below this point (see .charts-fit),
-            never less than the two plots' floors plus their titles. */}
+        {/* At least the rest of the viewport below this point (see .charts-fit);
+            a minimum rather than a height, so when the screen is shorter than
+            the plots' own floors the box grows and the page scrolls instead of
+            the bottom plot spilling into the card padding. */}
         <div
           ref={gestureRef}
           onPointerDown={onPointerDown}
-          className="charts-fit relative select-none"
+          className="charts-fit relative flex select-none flex-col"
           style={{
             cursor: view ? 'grab' : undefined,
-            height: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
-            minHeight: 400,
+            minHeight: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
           }}
         >
           <LinkedCharts
