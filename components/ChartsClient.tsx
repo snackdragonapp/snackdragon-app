@@ -27,7 +27,7 @@ import {
 } from '@/lib/chartView';
 import { dogHref } from '@/lib/dogHref';
 import { isValidYMD } from '@/lib/dates';
-import ChartsTouchDebug from '@/components/ChartsTouchDebug';
+import ChartsTouchDebug, { parseTouchDebugOptions } from '@/components/ChartsTouchDebug';
 
 // ───────────────────────────────────────────────────────────────
 // Constants
@@ -729,6 +729,10 @@ export default function ChartsClient({
 }) {
   const searchParams = useSearchParams();
   const debugTouch = searchParams.get('debug') === 'touch';
+  const debugOptions = useMemo(
+    () => parseTouchDebugOptions((k) => searchParams.get(k)),
+    [searchParams]
+  );
   const [view, setView] = useState<View | null>(() =>
     viewFromParams(searchParams.get('from'), searchParams.get('to'), rows)
   );
@@ -1124,7 +1128,7 @@ export default function ChartsClient({
   return (
     <>
       {titleRow(rangeControl)}
-      {debugTouch && <ChartsTouchDebug />}
+      {debugTouch && <ChartsTouchDebug options={debugOptions} />}
 
       <section className="rounded-lg border bg-card p-4">
         <Readout
