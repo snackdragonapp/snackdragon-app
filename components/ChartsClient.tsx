@@ -322,8 +322,13 @@ const LinkedCharts = memo(function LinkedCharts({
             <span className="text-xs text-muted-foreground tabular-nums">{windowLabel}</span>
           )}
         </div>
-        <div className="mt-1 min-h-[150px] flex-[2_1_0%]">
+        {/* The chart containers are absolutely positioned inside their flex
+            slots: a percentage height would not resolve against a slot whose
+            size comes from flexing in a min-height box, but an absolute
+            inset does. */}
+        <div className="relative mt-1 min-h-[150px] flex-[2_1_0%]">
           {weightAxis ? (
+            <div className="absolute inset-0">
             <ResponsiveContainer>
               <ComposedChart
                 data={rows}
@@ -385,8 +390,9 @@ const LinkedCharts = memo(function LinkedCharts({
                 />
               </ComposedChart>
             </ResponsiveContainer>
+            </div>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
               No weights yet.
             </div>
           )}
@@ -421,7 +427,8 @@ const LinkedCharts = memo(function LinkedCharts({
             </li>
           </ul>
         </div>
-        <div className="mt-1 min-h-[180px] flex-[3_1_0%]">
+        <div className="relative mt-1 min-h-[180px] flex-[3_1_0%]">
+          <div className="absolute inset-0">
           <ResponsiveContainer>
             <ComposedChart
               data={rows}
@@ -513,6 +520,7 @@ const LinkedCharts = memo(function LinkedCharts({
               />
             </ComposedChart>
           </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>
