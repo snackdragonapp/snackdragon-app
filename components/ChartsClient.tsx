@@ -1,7 +1,7 @@
 // components/ChartsClient.tsx
 'use client';
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { ChartRow, ChartSeries } from '@/lib/chartData';
+import type { ChartItem, ChartRow, ChartSeries } from '@/lib/chartData';
 import {
   clamp,
   normalizeView,
@@ -26,7 +26,7 @@ import {
   type View,
 } from '@/lib/chartView';
 import { dogHref } from '@/lib/dogHref';
-import { formatYMDLong, isValidYMD } from '@/lib/dates';
+import { isValidYMD } from '@/lib/dates';
 
 // ───────────────────────────────────────────────────────────────
 // Constants
@@ -59,9 +59,6 @@ const RANGES = [
 ] as const;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** Items shown in the readout before folding the rest into one "more" line. */
-const READOUT_MAX_ITEMS = 5;
 
 /** Ctrl+wheel: one mouse notch (deltaY ≈ 100) changes the window by ~20%. */
 const WHEEL_ZOOM_RATE = 0.002;
@@ -523,38 +520,116 @@ const LinkedCharts = memo(function LinkedCharts({
 });
 
 // ───────────────────────────────────────────────────────────────
-// Readout card
+// Readout card. Every part has a fixed height so the charts below never
+// move as the hovered day changes: a short date line, a stats grid with
+// three fixed cells, and a two-line strip of food chips packed to the
+// measured width, with the overflow folded into one "+N more" chip.
 // ───────────────────────────────────────────────────────────────
 
 type PrevWeight = { kg: number; ymd: string } | null;
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function fmtReadoutDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${WEEKDAYS[dayOfWeek(ymd)]}, ${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+/** Text width in CSS pixels for a font shorthand, via a cached canvas. */
+let measureCtx: CanvasRenderingContext2D | null = null;
+function textWidth(text: string, font: string): number {
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return text.length * 7;
+  measureCtx.font = font;
+  return measureCtx.measureText(text).width;
+}
+
+const CHIP_LINES = 2;
+const CHIP_GAP = 12; // gap-x-3 between chips
+const CHIP_INNER = 6; // gap-1.5 inside a chip
+const CHIP_SWATCH = 10; // h-2.5 w-2.5
+
+type Chip = { label: string; kcal: string; pct: string; color: string | null };
+
+function chipWidth(c: Chip, font: string): number {
+  // The kcal figure is rendered medium weight; 5% covers the difference.
+  const text = textWidth(c.label, font) + textWidth(c.kcal, font) * 1.05 + textWidth(c.pct, font);
+  return (c.color ? CHIP_SWATCH + CHIP_INNER : 0) + text + 2 * CHIP_INNER;
+}
+
+/** Do these chips fit in CHIP_LINES lines of `width`? */
+function chipsFit(chips: Chip[], width: number, font: string): boolean {
+  let line = 1;
+  let used = 0;
+  for (const c of chips) {
+    const w = Math.min(chipWidth(c, font), width);
+    if (used === 0) used = w;
+    else if (used + CHIP_GAP + w <= width) used += CHIP_GAP + w;
+    else {
+      line++;
+      used = w;
+      if (line > CHIP_LINES) return false;
+    }
+  }
+  return true;
+}
+
+/** The longest prefix of items that fits, with the rest folded into a "+N more" chip. */
+function packChips(items: ChartItem[], total: number, width: number, font: string): Chip[] {
+  const pct = (kcal: number) => `· ${Math.round((kcal / total) * 100)}%`;
+  for (let k = items.length; k >= 0; k--) {
+    const chips: Chip[] = items.slice(0, k).map((it) => ({
+      label: it.name,
+      kcal: fmtKcal(it.kcal),
+      pct: pct(it.kcal),
+      color: colorForSlot(it.slot),
+    }));
+    const rest = items.slice(k);
+    if (rest.length) {
+      const kcal = rest.reduce((a, it) => a + it.kcal, 0);
+      chips.push({ label: `+${rest.length} more`, kcal: fmtKcal(kcal), pct: pct(kcal), color: null });
+    }
+    if (width <= 0 || chipsFit(chips, width, font)) return chips;
+  }
+  return [];
+}
 
 function Readout({
   dogId,
   row,
   prevWeight,
-  pinned,
 }: {
   dogId: string;
   row: ChartRow;
   prevWeight: PrevWeight;
-  pinned: boolean;
 }) {
-  const shown = row.items.slice(0, READOUT_MAX_ITEMS);
-  const rest = row.items.slice(READOUT_MAX_ITEMS);
-  const restKcal = rest.reduce((a, it) => a + it.kcal, 0);
-  const pct = (kcal: number) => `${Math.round((kcal / row.total) * 100)}%`;
+  // Width and font of the chip strip, so packing uses real text widths.
+  const listRef = useRef<HTMLUListElement>(null);
+  const [box, setBox] = useState<{ width: number; font: string }>({ width: 0, font: '14px Arial' });
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const width = el.clientWidth;
+      setBox((b) => (b.width === width && b.font === font ? b : { width, font }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const chips = useMemo(
+    () => packChips(row.items, row.total, box.width, box.font),
+    [row, box]
+  );
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <div className="font-semibold">
-          {formatYMDLong(row.ymd)}
-          {pinned && (
-            <span className="ml-2 text-xs font-normal text-subtle-foreground">
-              pinned · tap to release
-            </span>
-          )}
-        </div>
+        <div className="truncate font-semibold">{fmtReadoutDate(row.ymd)}</div>
         <Link
           href={dogHref(dogId, `/day/${row.ymd}`)}
           className="shrink-0 text-sm text-muted-foreground underline"
@@ -563,8 +638,8 @@ function Readout({
         </Link>
       </div>
 
-      <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">
-        <div>
+      <div className="mt-0.5 grid grid-cols-2 gap-x-4 text-sm sm:grid-cols-3">
+        <div className="truncate">
           <span className="text-muted-foreground">Weight </span>
           {row.weight !== null ? (
             <span className="font-medium tabular-nums">{fmtKg(row.weight)} kg</span>
@@ -577,7 +652,7 @@ function Readout({
             <span className="text-subtle-foreground">—</span>
           )}
         </div>
-        <div>
+        <div className="truncate">
           <span className="text-muted-foreground">Calories </span>
           {row.total > 0 ? (
             <span className="font-medium tabular-nums">{fmtKcal(row.total)}</span>
@@ -588,39 +663,45 @@ function Readout({
             <span className="text-subtle-foreground tabular-nums"> / {fmtKcal(row.goal)} kcal</span>
           )}
         </div>
-        {row.avg7 !== null && (
-          <div>
-            <span className="text-muted-foreground">7-day avg </span>
+        <div className="truncate">
+          <span className="text-muted-foreground">7-day avg </span>
+          {row.avg7 !== null ? (
             <span className="font-medium tabular-nums">{fmtKcal(row.avg7)}</span>
-          </div>
-        )}
+          ) : (
+            <span className="text-subtle-foreground">—</span>
+          )}
+        </div>
       </div>
 
-      {/* Foods as wrapped chips; two lines reserved so the charts don't jump between days. */}
-      <ul className="mt-1.5 flex min-h-[2.75rem] flex-wrap content-start gap-x-3 gap-y-1 text-sm">
+      {/* Exactly two lines (h-11); packing decides what fits, overflow is a safety net. */}
+      <ul
+        ref={listRef}
+        className="mt-1.5 flex h-11 flex-wrap content-start gap-x-3 gap-y-1 overflow-hidden text-sm"
+      >
         {row.items.length === 0 ? (
           <li className="text-subtle-foreground">Nothing logged this day.</li>
         ) : (
-          <>
-            {shown.map((it, i) => (
-              <li key={`${it.name}-${i}`} className="flex max-w-full items-center gap-1.5">
+          chips.map((c, i) => (
+            <li key={i} className="flex max-w-full items-center gap-1.5">
+              {c.color && (
                 <span
                   className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                  style={{ background: colorForSlot(it.slot) }}
+                  style={{ background: c.color }}
                 />
-                <span className="truncate">{it.name}</span>
-                <span className="shrink-0 font-medium tabular-nums">{fmtKcal(it.kcal)}</span>
-                <span className="shrink-0 tabular-nums text-subtle-foreground">· {pct(it.kcal)}</span>
-              </li>
-            ))}
-            {rest.length > 0 && (
-              <li className="flex items-center gap-1.5 text-subtle-foreground">
-                <span>+{rest.length} more</span>
-                <span className="tabular-nums">{fmtKcal(restKcal)}</span>
-                <span className="tabular-nums">· {pct(restKcal)}</span>
-              </li>
-            )}
-          </>
+              )}
+              <span className={c.color ? 'truncate' : 'truncate text-subtle-foreground'}>
+                {c.label}
+              </span>
+              <span
+                className={
+                  'shrink-0 tabular-nums ' + (c.color ? 'font-medium' : 'text-subtle-foreground')
+                }
+              >
+                {c.kcal}
+              </span>
+              <span className="shrink-0 tabular-nums text-subtle-foreground">{c.pct}</span>
+            </li>
+          ))
         )}
       </ul>
     </div>
@@ -1004,7 +1085,6 @@ export default function ChartsClient({
           dogId={dogId}
           row={rows[activeIdx]}
           prevWeight={prevWeights[activeIdx]}
-          pinned={locked !== null}
         />
         <div className="my-3 border-t" />
         {/* Height: the rest of the viewport below this point (see .charts-fit),
@@ -1023,7 +1103,7 @@ export default function ChartsClient({
             rows={visible}
             domain={domain}
             ticks={ticks}
-            windowLabel={windowLabel}
+            windowLabel={locked !== null ? 'Pinned · tap to release' : windowLabel}
             series={series}
             showOther={showOther}
             weightAxis={weightAxis}
