@@ -322,7 +322,7 @@ const LinkedCharts = memo(function LinkedCharts({
     <div className="flex flex-1 flex-col" onClick={locked ? onRelease : undefined}>
       <div
         className="flex flex-1 flex-col"
-        style={{ pointerEvents: locked ? 'none' : 'auto', touchAction: 'pan-y' }}
+        style={{ pointerEvents: locked ? 'none' : 'auto' }}
       >
         {/* Weight */}
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -921,7 +921,15 @@ export default function ChartsClient({
         f: fractionAt(el, (a.clientX + b.clientX) / 2),
       };
     };
+    // The charts area sets touch-action: none, so the browser never claims a
+    // gesture partway through (which left two-finger moves half-delivered).
+    // In exchange, a one-finger vertical drag scrolls the page by hand.
+    let lastY: number | null = null;
     const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        lastY = e.touches[0].clientY;
+        return;
+      }
       if (e.touches.length !== 2) return;
       e.preventDefault();
       e.stopPropagation();
@@ -929,6 +937,13 @@ export default function ChartsClient({
       pinch = { ...touchInfo(e), view: viewRef.current };
     };
     const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        // One finger: Recharts scrubs (the event continues to it); we scroll.
+        const y = e.touches[0].clientY;
+        if (lastY !== null && !pinch) window.scrollBy(0, lastY - y);
+        lastY = y;
+        return;
+      }
       if (e.touches.length !== 2) return;
       e.preventDefault();
       e.stopPropagation();
@@ -939,8 +954,9 @@ export default function ChartsClient({
       const { dist, f } = touchInfo(e);
       setView(pinchView(pinch.view, n, pinch.dist, pinch.f, dist, f));
     };
-    const onTouchEnd = () => {
-      pinch = null;
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch = null;
+      lastY = e.touches.length === 1 ? e.touches[0].clientY : null;
     };
 
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -1106,6 +1122,7 @@ export default function ChartsClient({
           className="charts-fit relative mt-6 flex select-none flex-col"
           style={{
             cursor: view ? 'grab' : undefined,
+            touchAction: 'none',
             minHeight: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
           }}
         >
