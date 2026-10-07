@@ -27,6 +27,7 @@ import {
 } from '@/lib/chartView';
 import { dogHref } from '@/lib/dogHref';
 import { isValidYMD } from '@/lib/dates';
+import ChartsTouchDebug from '@/components/ChartsTouchDebug';
 
 // ───────────────────────────────────────────────────────────────
 // Constants
@@ -727,6 +728,7 @@ export default function ChartsClient({
   backHref: string | null;
 }) {
   const searchParams = useSearchParams();
+  const debugTouch = searchParams.get('debug') === 'touch';
   const [view, setView] = useState<View | null>(() =>
     viewFromParams(searchParams.get('from'), searchParams.get('to'), rows)
   );
@@ -937,26 +939,45 @@ export default function ChartsClient({
     // One finger is left to Recharts (scrub); it never scrolls the page here.
     const touchesHere = (e: TouchEvent) =>
       Array.from(e.touches).some((t) => el.contains(t.target as Node));
+    // Diagnostics: present only when the ?debug=touch overlay is mounted.
+    const dbg = (s: string) => window.__chartsTouchLog?.(s);
+    const fmtView = (v: View | null) =>
+      v ? `start=${v.start.toFixed(2)} len=${v.len.toFixed(2)}` : 'all';
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || !touchesHere(e)) return;
+      if (e.touches.length !== 2) return;
+      if (!touchesHere(e)) {
+        dbg('  gesture: touchstart n=2 ignored (no finger over charts)');
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       stopZoomAnim();
       pinch = { ...touchInfo(e), view: viewRef.current };
+      dbg(`  gesture: pinch start dist=${pinch.dist.toFixed(1)} f=${pinch.f.toFixed(3)} view ${fmtView(pinch.view)}`);
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || !touchesHere(e)) return;
+      if (e.touches.length !== 2) return;
+      if (!touchesHere(e)) {
+        dbg('  gesture: touchmove n=2 ignored (no finger over charts)');
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       if (!pinch) {
         pinch = { ...touchInfo(e), view: viewRef.current };
+        dbg(`  gesture: pinch start (from move) dist=${pinch.dist.toFixed(1)} f=${pinch.f.toFixed(3)}`);
         return;
       }
       const { dist, f } = touchInfo(e);
-      setView(pinchView(pinch.view, n, pinch.dist, pinch.f, dist, f));
+      const next = pinchView(pinch.view, n, pinch.dist, pinch.f, dist, f);
+      dbg(`  gesture: pinch move dist=${dist.toFixed(1)} f=${f.toFixed(3)} -> ${fmtView(next)}`);
+      setView(next);
     };
     const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) pinch = null;
+      if (e.touches.length < 2) {
+        if (pinch) dbg(`  gesture: pinch end (${e.type}, ${e.touches.length} left)`);
+        pinch = null;
+      }
     };
 
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -1103,6 +1124,7 @@ export default function ChartsClient({
   return (
     <>
       {titleRow(rangeControl)}
+      {debugTouch && <ChartsTouchDebug />}
 
       <section className="rounded-lg border bg-card p-4">
         <Readout
