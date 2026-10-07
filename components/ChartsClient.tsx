@@ -1,45 +1,112 @@
 // components/ChartsClient.tsx
 'use client';
 
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
-  ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-  LineChart,
-  Line,
+  Area,
   CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  Legend,
 } from 'recharts';
-import { useMemo } from 'react';
+import type { ChartRow, ChartSeries } from '@/lib/chartData';
+import {
+  clamp,
+  normalizeView,
+  panView,
+  pinchView,
+  presetView,
+  resolveView,
+  zoomView,
+  type View,
+} from '@/lib/chartView';
+import { dogHref } from '@/lib/dogHref';
+import { formatYMDLong, isValidYMD } from '@/lib/dates';
 
-type WeightPoint = { t: number; y: number; goal: number | null; ymd: string };
-type DailyPoint = { t: number; total: number; goal: number | null; ymd: string };
+// ───────────────────────────────────────────────────────────────
+// Constants
+// ───────────────────────────────────────────────────────────────
 
-const toNum = (v: unknown): number => (typeof v === 'number' ? v : Number(v));
+const SERIES_COLORS = [
+  'var(--color-chart-1)',
+  'var(--color-chart-2)',
+  'var(--color-chart-3)',
+  'var(--color-chart-4)',
+  'var(--color-chart-5)',
+  'var(--color-chart-6)',
+];
+const OTHER_COLOR = 'var(--color-chart-other)';
+const GOAL_COLOR = 'var(--color-chart-goal-line)';
+const INK = 'var(--foreground)';
+const SURFACE = 'var(--color-card)';
+const GRID = 'var(--color-border)';
+const AXIS_TEXT = 'var(--color-subtle-foreground)';
 
-type AxisConfig = {
-  domain: [number, number];
-  ticks: number[];
-};
+const SYNC_ID = 'dog-charts';
+const Y_AXIS_WIDTH = 48;
+const CHART_MARGIN = { top: 8, right: 12, bottom: 0, left: 0 };
 
-/**
- * Numeric Y‑axis helper:
- * - rounds out to nice numbers
- * - uses uniform spacing
- */
+const RANGES = [
+  { key: '30', label: '30d', days: 30 },
+  { key: '90', label: '90d', days: 90 },
+  { key: '180', label: '180d', days: 180 },
+  { key: 'all', label: 'All', days: null },
+] as const;
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Items shown in the readout before folding the rest into one "more" line. */
+const READOUT_MAX_ITEMS = 5;
+
+/** Ctrl+wheel: one mouse notch (deltaY ≈ 100) changes the window by ~20%. */
+const WHEEL_ZOOM_RATE = 0.002;
+/** Wheel zoom eases toward its target by this fraction per animation frame. */
+const ZOOM_EASE = 0.35;
+/** Pointer must move this far before a press counts as a pan rather than a click. */
+const DRAG_THRESHOLD_PX = 3;
+const HINT_MS = 1600;
+const HINT_COOLDOWN_MS = 8000;
+
+// ───────────────────────────────────────────────────────────────
+// Formatting helpers
+// ───────────────────────────────────────────────────────────────
+
+const fmtKcal = (n: number) => Math.round(n).toLocaleString('en-US');
+const fmtKg = (n: number) => String(Number(n.toFixed(2)));
+
+function fmtShortDate(ymd: string): string {
+  const [, m, d] = ymd.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}`;
+}
+
+function fmtMediumDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+function colorForSlot(slot: number | null): string {
+  return slot === null ? OTHER_COLOR : SERIES_COLORS[slot] ?? OTHER_COLOR;
+}
+
+// ───────────────────────────────────────────────────────────────
+// Axis helpers
+// ───────────────────────────────────────────────────────────────
+
+type AxisConfig = { domain: [number, number]; ticks: number[] };
+
+/** Rounds a numeric range out to nice, evenly spaced ticks. */
 function makeNiceAxis(values: number[], opts?: { includeZero?: boolean }): AxisConfig | null {
   const nums = values.filter((v) => Number.isFinite(v));
   if (!nums.length) return null;
 
   let minVal = Math.min(...nums);
   let maxVal = Math.max(...nums);
-
-  if (opts?.includeZero) {
-    minVal = Math.min(0, minVal);
-  }
+  if (opts?.includeZero) minVal = Math.min(0, minVal);
 
   if (minVal === maxVal) {
     const pad = minVal === 0 ? 1 : Math.abs(minVal) * 0.1;
@@ -50,9 +117,8 @@ function makeNiceAxis(values: number[], opts?: { includeZero?: boolean }): AxisC
   const span = maxVal - minVal;
   const roughStep = span / 4; // aim for ~5 ticks
   const pow10 = Math.pow(10, Math.floor(Math.log10(Math.max(roughStep, 1e-6))));
-  const candidates = [1, 2, 2.5, 5, 10];
   let step = pow10;
-  for (const m of candidates) {
+  for (const m of [1, 2, 2.5, 5, 10]) {
     const s = m * pow10;
     if (s >= roughStep) {
       step = s;
@@ -62,286 +128,867 @@ function makeNiceAxis(values: number[], opts?: { includeZero?: boolean }): AxisC
 
   const niceMin = Math.floor(minVal / step) * step;
   const niceMax = Math.ceil(maxVal / step) * step;
-
   const ticks: number[] = [];
-  for (let v = niceMin; v <= niceMax + step / 2; v += step) {
-    ticks.push(Number(v.toFixed(6))); // trim FP noise
-  }
+  for (let v = niceMin; v <= niceMax + step / 2; v += step) ticks.push(Number(v.toFixed(6)));
 
   return { domain: [niceMin, niceMax], ticks };
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Time X‑axis helper:
- * - picks a step in whole days (1, 7, 14, 30, 60)
- * - generates ticks at exact multiples of that step
- * - domain is [firstTick, lastTick], so grid = ticks exactly
- */
-function makeTimeAxis(values: number[]): AxisConfig | null {
-  const nums = values.filter((v) => Number.isFinite(v));
-  if (!nums.length) return null;
-
-  let minVal = Math.min(...nums);
-  let maxVal = Math.max(...nums);
-
-  if (minVal === maxVal) {
-    // expand by ±2 days so we have some span
-    minVal -= DAY_MS * 2;
-    maxVal += DAY_MS * 2;
-  }
-
-  const spanDays = Math.max((maxVal - minVal) / DAY_MS, 1);
-
-  let stepDays: number;
-  if (spanDays <= 14) stepDays = 1; // daily
-  else if (spanDays <= 60) stepDays = 7; // weekly
-  else if (spanDays <= 180) stepDays = 14; // every 2 weeks
-  else if (spanDays <= 365) stepDays = 30; // ~monthly
-  else stepDays = 60; // ~every 2 months
-
-  const stepMs = stepDays * DAY_MS;
-
-  // First tick: multiple of step at/before minVal
-  const firstTick = Math.floor(minVal / stepMs) * stepMs;
-
-  const ticks: number[] = [];
-  let t = firstTick;
-  while (t <= maxVal) {
-    ticks.push(t);
-    t += stepMs;
-  }
-
-  // Make sure we have at least 2 ticks so the domain isn't degenerate
-  if (ticks.length === 1) {
-    ticks.push(ticks[0] + stepMs);
-  }
-
-  const domain: [number, number] = [ticks[0], ticks[ticks.length - 1]];
-  return { domain, ticks };
+function dayOfWeek(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
 }
 
-// Minimal shape for the CartesianGrid callback so we avoid `any`
-type GridXProps = {
-  xAxis?: {
-    scale?: (value: number) => number;
+type XTicks = { values: number[]; format: (i: number) => string };
+
+/**
+ * Picks calendar-aligned x ticks (days, Mondays or month starts) among rows
+ * `from`..`to`, thinned so at most ~8 labels appear. Month ticks carry the
+ * year on the first tick and whenever the year changes from the previous tick.
+ */
+function pickTicks(rows: ChartRow[], from: number, to: number): XTicks {
+  if (to < from) return { values: [], format: () => '' };
+  const MAX_TICKS = 8;
+  const count = to - from + 1;
+
+  let mode: 'day' | 'week' | 'month';
+  const candidates: number[] = [];
+  if (count <= 14) {
+    mode = 'day';
+    for (let i = from; i <= to; i++) candidates.push(i);
+  } else if (count <= 70) {
+    mode = 'week';
+    for (let i = from; i <= to; i++) if (dayOfWeek(rows[i].ymd) === 1) candidates.push(i);
+  } else {
+    mode = 'month';
+    for (let i = from; i <= to; i++) if (rows[i].ymd.endsWith('-01')) candidates.push(i);
+  }
+
+  const stride = Math.max(1, Math.ceil(candidates.length / MAX_TICKS));
+  const values = candidates.filter((_, k) => k % stride === 0);
+
+  const withYear = new Set<number>();
+  values.forEach((i, k) => {
+    if (k === 0 || rows[i].ymd.slice(0, 4) !== rows[values[k - 1]].ymd.slice(0, 4)) withYear.add(i);
+  });
+
+  const format = (i: number) => {
+    const row = rows[i];
+    if (!row) return '';
+    const [y, m, d] = row.ymd.split('-').map(Number);
+    if (mode === 'month') return withYear.has(i) ? `${MONTHS[m - 1]} ${y}` : MONTHS[m - 1];
+    return `${MONTHS[m - 1]} ${d}`;
   };
+
+  return { values, format };
+}
+
+// ───────────────────────────────────────────────────────────────
+// Plot geometry (both charts share margins and y-axis width, so the
+// horizontal plot area of the wrapper element is the same for both).
+// ───────────────────────────────────────────────────────────────
+
+function plotWidthOf(el: HTMLElement): number {
+  const plotLeft = CHART_MARGIN.left + Y_AXIS_WIDTH;
+  return Math.max(1, el.getBoundingClientRect().width - plotLeft - CHART_MARGIN.right);
+}
+
+/** Horizontal position of a client x inside the plot, 0 = left edge, 1 = right edge. */
+function fractionAt(el: HTMLElement, clientX: number): number {
+  const rect = el.getBoundingClientRect();
+  const plotLeft = CHART_MARGIN.left + Y_AXIS_WIDTH;
+  return clamp((clientX - rect.left - plotLeft) / plotWidthOf(el), 0, 1);
+}
+
+// ───────────────────────────────────────────────────────────────
+// Cursor: one vertical hairline in both charts.
+// ───────────────────────────────────────────────────────────────
+
+type CursorProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  points?: ReadonlyArray<{ x: number; y: number }>;
 };
 
-export default function ChartsClient({
-  weights,
-  daily,
-}: {
-  weights: WeightPoint[];
-  daily: DailyPoint[];
-}) {
-  // Stable color per goal value
-  const palette = (i: number) => `hsl(${(i * 137.508) % 360} 62% 45%)`;
-  const noGoalColor = 'var(--color-chart-no-goal-point)';
+function CursorLine({ x, y, width, height, points }: CursorProps) {
+  let cx: number | undefined;
+  let top: number | undefined;
+  let bottom: number | undefined;
 
-  const weightDatasets = useMemo(() => {
-    const map = new Map<
-      string,
-      { label: string; color: string; points: { t: number; y: number; ymd: string }[] }
-    >();
-
-    // unique goals (null last)
-    const uniqueGoals = Array.from(new Set(weights.map((w) => w.goal))).sort((a, b) => {
-      if (a === null && b === null) return 0;
-      if (a === null) return 1;
-      if (b === null) return -1;
-      return a - b;
-    });
-    const colorByGoal = new Map<number | 'no', string>();
-    uniqueGoals.forEach((g, idx) => {
-      if (g === null) colorByGoal.set('no', noGoalColor);
-      else colorByGoal.set(g, palette(idx));
-    });
-
-    for (const w of weights) {
-      const key = w.goal === null ? 'no' : String(w.goal);
-      if (!map.has(key)) {
-        const color =
-          w.goal === null ? noGoalColor : colorByGoal.get(w.goal) ?? palette(map.size);
-        map.set(key, {
-          label: w.goal === null ? 'No goal' : `Goal: ${w.goal} kcal`,
-          color,
-          points: [],
-        });
-      }
-      map.get(key)!.points.push({ t: w.t, y: w.y, ymd: w.ymd });
-    }
-
-    return Array.from(map.values());
-  }, [weights]);
-
-  const dailyData = useMemo(
-    () => daily.map((d) => ({ t: d.t, total: d.total, goal: d.goal, ymd: d.ymd })),
-    [daily]
-  );
-
-  // Y‑axis configs
-  const weightAxis = useMemo(() => {
-    if (!weights.length) return null;
-    const ys = weights.map((w) => w.y);
-    return makeNiceAxis(ys, { includeZero: false });
-  }, [weights]);
-
-  const dailyAxis = useMemo(() => {
-    if (!daily.length) return null;
-    const vals: number[] = [];
-    for (const d of daily) {
-      if (Number.isFinite(d.total)) vals.push(d.total);
-      if (d.goal != null && Number.isFinite(d.goal)) vals.push(d.goal);
-    }
-    return makeNiceAxis(vals);
-  }, [daily]);
-
-  // X‑axis configs (regular time steps)
-  const weightXAxis = useMemo(() => {
-    if (!weights.length) return null;
-    const ts = weights.map((w) => w.t);
-    return makeTimeAxis(ts);
-  }, [weights]);
-
-  const dailyXAxis = useMemo(() => {
-    if (!daily.length) return null;
-    const ts = daily.map((d) => d.t);
-    return makeTimeAxis(ts);
-  }, [daily]);
-
-  const fmtDate = (t: number) => {
-    try {
-      return new Date(t).toLocaleDateString(undefined, {
-        timeZone: 'UTC',           // ✅ keep labels stable
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return '';
-    }
-  };
+  if (points && points.length >= 2) {
+    cx = points[0].x;
+    top = Math.min(points[0].y, points[1].y);
+    bottom = Math.max(points[0].y, points[1].y);
+  } else if (x != null && y != null && width != null && height != null) {
+    cx = x + width / 2;
+    top = y;
+    bottom = y + height;
+  }
+  if (cx == null || top == null || bottom == null) return null;
 
   return (
-    <div className="space-y-6">
-      {/* --- Weights chart --- */}
-      <section className="rounded-lg border bg-card p-4">
-        <h2 className="font-semibold mb-2">Weights (kg)</h2>
-        <div style={{ width: '100%', height: 320 }}>
+    <line
+      x1={cx}
+      x2={cx}
+      y1={top}
+      y2={bottom}
+      stroke={AXIS_TEXT}
+      strokeWidth={1}
+      pointerEvents="none"
+    />
+  );
+}
+
+const noTooltipContent = () => null;
+const noLabel = () => '';
+
+// ───────────────────────────────────────────────────────────────
+// The two linked charts. Memoised so hover only re-renders the readout.
+//
+// Both charts share a numeric x axis (the row index) whose domain is the
+// fractional zoom window: day i occupies [i - 0.5, i + 0.5]. Calories are
+// stacked step areas, one path per food, rather than one rectangle per food
+// per day: that keeps the DOM small enough to re-render every frame while
+// zooming, and there are no per-day seams to anti-alias into stripes.
+// ───────────────────────────────────────────────────────────────
+
+type HoverState = { activeTooltipIndex?: number | string | null };
+
+type LinkedChartsProps = {
+  /** Rows covering the window plus one on each side, so edge days are drawn in full. */
+  rows: ChartRow[];
+  domain: [number, number];
+  ticks: XTicks;
+  series: ChartSeries[];
+  showOther: boolean;
+  /** Y axes come from the full history so zooming and panning never rescale the charts. */
+  weightAxis: AxisConfig | null;
+  kcalAxis: AxisConfig | null;
+  defaultIndex: number;
+  locked: boolean;
+  onActive: (ymd: string) => void;
+  onLeave: () => void;
+  onPick: (ymd: string | undefined) => void;
+  onRelease: () => void;
+};
+
+const LinkedCharts = memo(function LinkedCharts({
+  rows,
+  domain,
+  ticks,
+  series,
+  showOther,
+  weightAxis,
+  kcalAxis,
+  defaultIndex,
+  locked,
+  onActive,
+  onLeave,
+  onPick,
+  onRelease,
+}: LinkedChartsProps) {
+  const ymdAt = useCallback(
+    (s: HoverState) => {
+      const idx = Number(s.activeTooltipIndex);
+      return Number.isInteger(idx) ? rows[idx]?.ymd : undefined;
+    },
+    [rows]
+  );
+  const handleMove = useCallback(
+    (s: HoverState) => {
+      const ymd = ymdAt(s);
+      if (ymd) onActive(ymd);
+    },
+    [ymdAt, onActive]
+  );
+  const handleClick = useCallback((s: HoverState) => onPick(ymdAt(s)), [ymdAt, onPick]);
+
+  const tickStyle = { fontSize: 12, fill: AXIS_TEXT };
+
+  return (
+    <div onClick={locked ? onRelease : undefined}>
+      <div style={{ pointerEvents: locked ? 'none' : 'auto', touchAction: 'pan-y' }}>
+        {/* Weight */}
+        <h2 className="font-semibold text-sm">Weight (kg)</h2>
+        <div className="mt-1" style={{ width: '100%', height: 200 }}>
+          {weightAxis ? (
+            <ResponsiveContainer>
+              <ComposedChart
+                data={rows}
+                syncId={SYNC_ID}
+                margin={CHART_MARGIN}
+                onMouseMove={handleMove}
+                onTouchMove={handleMove}
+                onMouseLeave={onLeave}
+                onClick={handleClick}
+              >
+                <CartesianGrid stroke={GRID} />
+                {/* Same ticks as the chart below (they drive the grid), but no labels:
+                    the calories chart carries the date labels for both. */}
+                <XAxis
+                  dataKey="i"
+                  type="number"
+                  domain={domain}
+                  allowDataOverflow
+                  ticks={ticks.values}
+                  interval={0}
+                  tickFormatter={noLabel}
+                  tick={tickStyle}
+                  tickLine={false}
+                  axisLine={{ stroke: GRID }}
+                  height={6}
+                />
+                <YAxis
+                  width={Y_AXIS_WIDTH}
+                  domain={weightAxis.domain}
+                  ticks={weightAxis.ticks}
+                  tick={tickStyle}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  content={noTooltipContent}
+                  cursor={<CursorLine />}
+                  defaultIndex={defaultIndex}
+                  isAnimationActive={false}
+                />
+                {/* Straight segments between measurements, broken across long gaps. */}
+                <Line
+                  type="linear"
+                  dataKey="weightLine"
+                  stroke={INK}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+                {/* Dots only on the days that were actually measured. */}
+                <Line
+                  type="linear"
+                  dataKey="weight"
+                  stroke="none"
+                  dot={{ r: 3.5, strokeWidth: 2, stroke: SURFACE, fill: INK }}
+                  activeDot={{ r: 5.5, strokeWidth: 2, stroke: SURFACE, fill: INK }}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              No weights yet.
+            </div>
+          )}
+        </div>
+
+        {/* Calories */}
+        <h2 className="font-semibold text-sm mt-4">Calories (kcal)</h2>
+        <div className="mt-1" style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
-            <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                verticalCoordinatesGenerator={(props: GridXProps): number[] => {
-                  if (!weightXAxis || weightXAxis.ticks.length === 0) return [];
-                  const scale = props.xAxis?.scale;
-                  if (!scale) return [];
-                  return weightXAxis.ticks.map((t) => scale(t));
-                }}
-              />
+            <ComposedChart
+              data={rows}
+              syncId={SYNC_ID}
+              margin={CHART_MARGIN}
+              onMouseMove={handleMove}
+              onTouchMove={handleMove}
+              onMouseLeave={onLeave}
+              onClick={handleClick}
+            >
+              <CartesianGrid stroke={GRID} />
               <XAxis
+                dataKey="i"
                 type="number"
-                dataKey="t"
-                domain={weightXAxis ? weightXAxis.domain : ['dataMin', 'dataMax']}
-                ticks={weightXAxis ? weightXAxis.ticks : undefined}
-                scale="time"
-                tickFormatter={fmtDate}
-                tick={{ fontSize: 12 }}
+                domain={domain}
+                allowDataOverflow
+                ticks={ticks.values}
+                interval={0}
+                tickFormatter={ticks.format}
+                tick={tickStyle}
+                tickLine={false}
+                axisLine={{ stroke: GRID }}
+                height={24}
               />
               <YAxis
-                dataKey="y"
-                domain={weightAxis ? weightAxis.domain : ['dataMin', 'dataMax']}
-                ticks={weightAxis ? weightAxis.ticks : undefined}
-                tick={{ fontSize: 12 }}
+                width={Y_AXIS_WIDTH}
+                domain={kcalAxis ? kcalAxis.domain : [0, 'auto']}
+                ticks={kcalAxis ? kcalAxis.ticks : undefined}
+                tickFormatter={fmtKcal}
+                tick={tickStyle}
+                tickLine={false}
+                axisLine={false}
               />
               <Tooltip
-                formatter={(val: unknown, name: string) => {
-                  if (name === 'y') return [`${toNum(val).toFixed(2)} kg`, 'Weight'];
-                  return [String(val), name];
-                }}
-                labelFormatter={(label: unknown) => fmtDate(toNum(label))}
+                content={noTooltipContent}
+                cursor={<CursorLine />}
+                defaultIndex={defaultIndex}
+                isAnimationActive={false}
               />
-              <Legend />
-              {weightDatasets.map((ds) => (
-                <Scatter
-                  key={ds.label}
-                  name={ds.label}
-                  data={ds.points}
-                  fill={ds.color}
-                  line={false}
-                  shape="circle"
+              {/* "step" switches value halfway between points, so day i fills [i-0.5, i+0.5]. */}
+              {series.map((s, i) => (
+                <Area
+                  key={s.key}
+                  dataKey={s.key}
+                  stackId="kcal"
+                  type="step"
+                  fill={SERIES_COLORS[i]}
+                  fillOpacity={1}
+                  stroke="none"
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
                 />
               ))}
-            </ScatterChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      {/* --- Daily calories chart --- */}
-      <section className="rounded-lg border bg-card p-4">
-        <h2 className="font-semibold mb-2">Daily calories (kcal) vs Goal</h2>
-        <div style={{ width: '100%', height: 320 }}>
-          <ResponsiveContainer>
-            <LineChart data={dailyData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                verticalCoordinatesGenerator={(props: GridXProps): number[] => {
-                  if (!dailyXAxis || dailyXAxis.ticks.length === 0) return [];
-                  const scale = props.xAxis?.scale;
-                  if (!scale) return [];
-                  return dailyXAxis.ticks.map((t) => scale(t));
-                }}
-              />
-              <XAxis
-                type="number"
-                dataKey="t"
-                domain={dailyXAxis ? dailyXAxis.domain : ['dataMin', 'dataMax']}
-                ticks={dailyXAxis ? dailyXAxis.ticks : undefined}
-                scale="time"
-                tickFormatter={fmtDate}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis
-                domain={dailyAxis ? dailyAxis.domain : ['dataMin', 'dataMax']}
-                ticks={dailyAxis ? dailyAxis.ticks : undefined}
-                tick={{ fontSize: 12 }}
-              />
-              <Tooltip
-                formatter={(val: unknown, name: string) => {
-                  const n = toNum(val);
-                  if (name === 'total') return [`${n.toFixed(0)} kcal`, 'Total'];
-                  if (name === 'goal') return [`${n.toFixed(0)} kcal`, 'Goal'];
-                  return [String(val), name];
-                }}
-                labelFormatter={(label: unknown) => fmtDate(toNum(label))}
-              />
-              <Legend />
-              {/* Points only for Total */}
+              {showOther && (
+                <Area
+                  dataKey="other"
+                  stackId="kcal"
+                  type="step"
+                  fill={OTHER_COLOR}
+                  fillOpacity={1}
+                  stroke="none"
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+              )}
               <Line
-                name="Total"
-                type="monotone"
-                dataKey="total"
-                stroke="var(--foreground)"
-                strokeOpacity={0}
-                dot={{ r: 3, stroke: 'none', fill: 'var(--foreground)' }}
-                isAnimationActive={false}
-              />
-              {/* Stepped goal line */}
-              <Line
-                name="Goal"
                 type="stepAfter"
                 dataKey="goal"
-                stroke="var(--color-chart-goal-line)"
+                stroke={GOAL_COLOR}
+                strokeWidth={2}
                 strokeDasharray="6 4"
                 dot={false}
+                activeDot={false}
                 connectNulls
-                strokeWidth={2}
                 isAnimationActive={false}
               />
-            </LineChart>
+              {/* Drawn last so it stays visible where it coincides with the goal. */}
+              <Line
+                type="monotone"
+                dataKey="avg7"
+                stroke={INK}
+                strokeWidth={2}
+                dot={false}
+                activeDot={false}
+                connectNulls
+                isAnimationActive={false}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Legend */}
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {series.map((s, i) => (
+            <li key={s.key} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-sm"
+                style={{ background: SERIES_COLORS[i] }}
+              />
+              {s.label}
+            </li>
+          ))}
+          {showOther && (
+            <li className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: OTHER_COLOR }} />
+              Other
+            </li>
+          )}
+          <li className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-4" style={{ background: INK }} />
+            7-day avg
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: GOAL_COLOR }} />
+            Goal
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+});
+
+// ───────────────────────────────────────────────────────────────
+// Readout card
+// ───────────────────────────────────────────────────────────────
+
+type PrevWeight = { kg: number; ymd: string } | null;
+
+function Readout({
+  dogId,
+  row,
+  prevWeight,
+  pinned,
+}: {
+  dogId: string;
+  row: ChartRow;
+  prevWeight: PrevWeight;
+  pinned: boolean;
+}) {
+  const shown = row.items.slice(0, READOUT_MAX_ITEMS);
+  const rest = row.items.slice(READOUT_MAX_ITEMS);
+  const restKcal = rest.reduce((a, it) => a + it.kcal, 0);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="font-semibold">
+          {formatYMDLong(row.ymd)}
+          {pinned && (
+            <span className="ml-2 text-xs font-normal text-subtle-foreground">
+              pinned · tap to release
+            </span>
+          )}
+        </div>
+        <Link
+          href={dogHref(dogId, `/day/${row.ymd}`)}
+          className="shrink-0 text-sm text-muted-foreground underline"
+        >
+          Open day →
+        </Link>
+      </div>
+
+      <div className="mt-1 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+        <div>
+          <span className="text-muted-foreground">Weight </span>
+          {row.weight !== null ? (
+            <span className="font-medium tabular-nums">{fmtKg(row.weight)} kg</span>
+          ) : prevWeight ? (
+            <>
+              <span className="font-medium tabular-nums">{fmtKg(prevWeight.kg)} kg</span>
+              <span className="text-subtle-foreground"> ({fmtShortDate(prevWeight.ymd)})</span>
+            </>
+          ) : (
+            <span className="text-subtle-foreground">—</span>
+          )}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Calories </span>
+          {row.total > 0 ? (
+            <span className="font-medium tabular-nums">{fmtKcal(row.total)}</span>
+          ) : (
+            <span className="text-subtle-foreground">—</span>
+          )}
+          {row.goal !== null && (
+            <span className="text-subtle-foreground tabular-nums"> / {fmtKcal(row.goal)} kcal</span>
+          )}
+        </div>
+        {row.avg7 !== null && (
+          <div>
+            <span className="text-muted-foreground">7-day avg </span>
+            <span className="font-medium tabular-nums">{fmtKcal(row.avg7)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Fixed minimum height so the charts below don't jump as the list changes. */}
+      <ul className="mt-2 min-h-[10.5rem] text-sm">
+        {row.items.length === 0 ? (
+          <li className="py-1 text-subtle-foreground">Nothing logged this day.</li>
+        ) : (
+          <>
+            {shown.map((it, i) => (
+              <li key={`${it.name}-${i}`} className="flex items-center gap-2 py-1">
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                  style={{ background: colorForSlot(it.slot) }}
+                />
+                <span className="min-w-0 flex-1 truncate">{it.name}</span>
+                <span className="tabular-nums font-medium">{fmtKcal(it.kcal)}</span>
+                <span className="w-10 text-right tabular-nums text-subtle-foreground">
+                  {Math.round((it.kcal / row.total) * 100)}%
+                </span>
+              </li>
+            ))}
+            {rest.length > 0 && (
+              <li className="flex items-center gap-2 py-1 text-subtle-foreground">
+                <span className="inline-block h-2.5 w-2.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  {rest.length} more item{rest.length === 1 ? '' : 's'}
+                </span>
+                <span className="tabular-nums">{fmtKcal(restKcal)}</span>
+                <span className="w-10 text-right tabular-nums">
+                  {Math.round((restKcal / row.total) * 100)}%
+                </span>
+              </li>
+            )}
+          </>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Page client
+// ───────────────────────────────────────────────────────────────
+
+/** Initial window from ?from=YYYY-MM-DD&to=YYYY-MM-DD, if both fall inside the data. */
+function viewFromParams(from: string | null, to: string | null, rows: ChartRow[]): View | null {
+  if (!from || !to || !isValidYMD(from) || !isValidYMD(to)) return null;
+  const a = rows.findIndex((r) => r.ymd === from);
+  const b = rows.findIndex((r) => r.ymd === to);
+  if (a < 0 || b < a) return null;
+  return normalizeView(a, b - a + 1, rows.length);
+}
+
+export default function ChartsClient({
+  dogId,
+  rows,
+  series,
+}: {
+  dogId: string;
+  rows: ChartRow[];
+  series: ChartSeries[];
+}) {
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<View | null>(() =>
+    viewFromParams(searchParams.get('from'), searchParams.get('to'), rows)
+  );
+  const [hoverYmd, setHoverYmd] = useState<string | null>(null);
+  const [lockedYmd, setLockedYmd] = useState<string | null>(null);
+  const [hint, setHint] = useState(false);
+
+  const n = rows.length;
+
+  // The fractional window drives the x domain; the integer window (res) drives
+  // ticks, labels and the URL.
+  const start = view ? view.start : 0;
+  const len = view ? view.len : n;
+  const domain = useMemo<[number, number]>(() => [start - 0.5, start + len - 0.5], [start, len]);
+  const res = resolveView(view, n);
+  const from = res.start;
+  const to = res.start + res.len - 1;
+
+  // Rows handed to the charts: the window plus one day each side, so the days
+  // cut by the window's edges are still drawn (the axis clips them).
+  const sliceFrom = Math.max(0, Math.floor(start) - 1);
+  const sliceTo = Math.min(n, Math.ceil(start + len) + 1);
+  const visible = useMemo(() => rows.slice(sliceFrom, sliceTo), [rows, sliceFrom, sliceTo]);
+
+  const ticks = useMemo(() => pickTicks(rows, from, to), [rows, from, to]);
+
+  // Last measured weight before each row (carry-forward over the full history).
+  const prevWeights = useMemo(() => {
+    const out: PrevWeight[] = [];
+    let last: PrevWeight = null;
+    for (const r of rows) {
+      out.push(last);
+      if (r.weight !== null) last = { kg: r.weight, ymd: r.ymd };
+    }
+    return out;
+  }, [rows]);
+
+  const fullIndex = useMemo(() => {
+    const m = new Map<string, number>();
+    rows.forEach((r, i) => m.set(r.ymd, i));
+    return m;
+  }, [rows]);
+
+  const showOther = useMemo(() => rows.some((r) => r.other > 0), [rows]);
+
+  // Y axes from the whole history: zoom and pan only ever move sideways, and
+  // any two periods are drawn to the same scale.
+  const weightAxis = useMemo(
+    () => makeNiceAxis(rows.map((r) => r.weight).filter((v): v is number => v !== null)),
+    [rows]
+  );
+  const kcalAxis = useMemo(() => {
+    const vals: number[] = [];
+    for (const r of rows) {
+      if (r.total > 0) vals.push(r.total);
+      if (r.goal !== null) vals.push(r.goal);
+      if (r.avg7 !== null) vals.push(r.avg7);
+    }
+    return makeNiceAxis(vals, { includeZero: true });
+  }, [rows]);
+
+  // ── Keep the window in the URL (no navigation, so no server round-trip). ──
+  useEffect(() => {
+    if (n === 0) return;
+    const t = setTimeout(() => {
+      const url = new URL(window.location.href);
+      if (view) {
+        url.searchParams.set('from', rows[from].ymd);
+        url.searchParams.set('to', rows[to].ymd);
+      } else {
+        url.searchParams.delete('from');
+        url.searchParams.delete('to');
+      }
+      if (url.href !== window.location.href) window.history.replaceState(null, '', url);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [view, rows, from, to, n]);
+
+  // ── Hint shown when someone plain-scrolls over the charts. ──
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hintShownAt = useRef(0);
+  const showHint = useCallback(() => {
+    const now = Date.now();
+    if (now - hintShownAt.current < HINT_COOLDOWN_MS) return;
+    hintShownAt.current = now;
+    setHint(true);
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setHint(false), HINT_MS);
+  }, []);
+  useEffect(() => () => {
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+  }, []);
+
+  // ── Zoom gestures: Ctrl+wheel / trackpad pinch on desktop, two-finger pinch on touch. ──
+  const gestureRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<View | null>(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  // Wheel zoom eases toward a target over a few frames instead of jumping a
+  // whole notch at a time. Any other gesture cancels the easing first.
+  const anim = useRef<{ cur: View | null; target: View | null; raf: number | null }>({
+    cur: null,
+    target: null,
+    raf: null,
+  });
+  const stopZoomAnim = useCallback(() => {
+    const a = anim.current;
+    if (a.raf !== null) cancelAnimationFrame(a.raf);
+    a.raf = null;
+    a.target = null;
+  }, []);
+  useEffect(() => stopZoomAnim, [stopZoomAnim]);
+
+  useEffect(() => {
+    const el = gestureRef.current;
+    if (!el || n === 0) return;
+
+    const full = { start: 0, len: n };
+    const step = () => {
+      const a = anim.current;
+      const cur = a.cur ?? full;
+      const target = a.target ?? full;
+      const nextLen = cur.len + (target.len - cur.len) * ZOOM_EASE;
+      const nextStart = cur.start + (target.start - cur.start) * ZOOM_EASE;
+      const close =
+        Math.abs(target.len - nextLen) < 0.05 && Math.abs(target.start - nextStart) < 0.05;
+      const next = close ? a.target : normalizeView(nextStart, nextLen, n);
+      a.cur = next;
+      setView(next);
+      if (close) {
+        a.raf = null;
+        a.target = null;
+      } else {
+        a.raf = requestAnimationFrame(step);
+      }
+    };
+
+    // Chrome fixes a wheel sequence's cancelability on its first event: if a
+    // plain page scroll runs straight into a Ctrl+wheel/pinch, the zoom events
+    // can no longer be cancelled and the browser zooms the page as well. So
+    // every wheel event over the charts is cancelled, and plain scrolling is
+    // forwarded to the page by hand, which feels the same.
+    let lastZoomAt = 0;
+    const onWheel = (e: WheelEvent) => {
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 800 : e.deltaY;
+      const dx = e.deltaMode === 1 ? e.deltaX * 33 : e.deltaMode === 2 ? e.deltaX * 800 : e.deltaX;
+      e.preventDefault();
+      if (!e.ctrlKey) {
+        // Fingers rarely lift cleanly: stray scroll events inside a pinch are dropped.
+        if (Date.now() - lastZoomAt < 250) return;
+        window.scrollBy({ top: dy, left: dx, behavior: 'auto' });
+        showHint();
+        return;
+      }
+      lastZoomAt = Date.now();
+      const factor = clamp(Math.exp(dy * WHEEL_ZOOM_RATE), 0.5, 2);
+      const f = fractionAt(el, e.clientX);
+      const a = anim.current;
+      const base = a.raf !== null ? a.target : viewRef.current;
+      a.target = zoomView(base, n, f, factor);
+      if (a.raf === null) {
+        a.cur = viewRef.current;
+        a.raf = requestAnimationFrame(step);
+      }
+    };
+
+    // Two-finger pinch. These run in the capture phase and stop propagation so
+    // Recharts' own one-finger scrubbing doesn't jump between the fingers.
+    let pinch: { dist: number; f: number; view: View | null } | null = null;
+    const touchInfo = (e: TouchEvent) => {
+      const a = e.touches[0];
+      const b = e.touches[1];
+      return {
+        dist: Math.max(1, Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY)),
+        f: fractionAt(el, (a.clientX + b.clientX) / 2),
+      };
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      e.preventDefault();
+      e.stopPropagation();
+      stopZoomAnim();
+      pinch = { ...touchInfo(e), view: viewRef.current };
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!pinch) {
+        pinch = { ...touchInfo(e), view: viewRef.current };
+        return;
+      }
+      const { dist, f } = touchInfo(e);
+      setView(pinchView(pinch.view, n, pinch.dist, pinch.f, dist, f));
+    };
+    const onTouchEnd = () => {
+      pinch = null;
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+    el.addEventListener('touchend', onTouchEnd, { capture: true });
+    el.addEventListener('touchcancel', onTouchEnd, { capture: true });
+    return () => {
+      stopZoomAnim();
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart, { capture: true });
+      el.removeEventListener('touchmove', onTouchMove, { capture: true });
+      el.removeEventListener('touchend', onTouchEnd, { capture: true });
+      el.removeEventListener('touchcancel', onTouchEnd, { capture: true });
+    };
+  }, [n, showHint, stopZoomAnim]);
+
+  // ── Drag to pan with the mouse when zoomed in. ──
+  const dragMovedRef = useRef(false);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const el = gestureRef.current;
+      const base = viewRef.current;
+      if (!el || !base || e.pointerType !== 'mouse' || e.button !== 0) return;
+      stopZoomAnim();
+      const startX = e.clientX;
+      const move = (ev: PointerEvent) => {
+        const dx = ev.clientX - startX;
+        if (Math.abs(dx) > DRAG_THRESHOLD_PX) dragMovedRef.current = true;
+        if (!dragMovedRef.current) return;
+        setView(panView(base, n, -dx / plotWidthOf(el)));
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        // The click that follows a drag must not pin or release; clear after it fires.
+        setTimeout(() => {
+          dragMovedRef.current = false;
+        }, 0);
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    },
+    [n, stopZoomAnim]
+  );
+
+  const onActive = useCallback((ymd: string) => setHoverYmd(ymd), []);
+  const onLeave = useCallback(() => setHoverYmd(null), []);
+  const onPick = useCallback((ymd: string | undefined) => {
+    if (ymd && !dragMovedRef.current) setLockedYmd(ymd);
+  }, []);
+  const onRelease = useCallback(() => {
+    if (!dragMovedRef.current) setLockedYmd(null);
+  }, []);
+
+  if (n === 0) {
+    return (
+      <section className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+        Nothing to chart yet. Log some entries or add a weight to get started.
+      </section>
+    );
+  }
+
+  const inWindow = (ymd: string | null) => {
+    if (ymd === null) return false;
+    const i = fullIndex.get(ymd);
+    return i !== undefined && i >= from && i <= to;
+  };
+  // A pin or hover that fell outside the current window is ignored rather than cleared.
+  const locked = inWindow(lockedYmd) ? lockedYmd : null;
+  const hover = inWindow(hoverYmd) ? hoverYmd : null;
+  const activeIdx = locked !== null ? fullIndex.get(locked)! : hover !== null ? fullIndex.get(hover)! : to;
+  const defaultIndex = (locked !== null ? fullIndex.get(locked)! : to) - sliceFrom;
+
+  const presetActive = (days: number | null) =>
+    days === null
+      ? view === null
+      : view !== null && res.len === Math.min(days, n) && res.start === n - res.len;
+  const customWindow = !RANGES.some((r) => presetActive(r.days));
+
+  return (
+    <div className="space-y-3">
+      {/* Range control */}
+      <div role="group" aria-label="Date range" className="flex flex-wrap items-center gap-2 text-sm">
+        {RANGES.map((r) => {
+          const active = presetActive(r.days);
+          return (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => {
+                stopZoomAnim();
+                setView(presetView(r.days, n));
+              }}
+              aria-pressed={active}
+              className={
+                'rounded border px-2 py-1 hover:bg-control-hover focus:outline-none focus:ring-2 focus:ring-control-ring ' +
+                (active ? 'bg-nav-item-active font-medium' : '')
+              }
+            >
+              {r.label}
+            </button>
+          );
+        })}
+        {customWindow && (
+          <span className="text-muted-foreground tabular-nums">
+            {fmtMediumDate(rows[from].ymd)} – {fmtMediumDate(rows[to].ymd)}
+          </span>
+        )}
+      </div>
+
+      <section className="rounded-lg border bg-card p-4">
+        <Readout
+          dogId={dogId}
+          row={rows[activeIdx]}
+          prevWeight={prevWeights[activeIdx]}
+          pinned={locked !== null}
+        />
+        <div className="my-4 border-t" />
+        <div
+          ref={gestureRef}
+          onPointerDown={onPointerDown}
+          className="relative select-none"
+          style={{ cursor: view ? 'grab' : undefined }}
+        >
+          <LinkedCharts
+            rows={visible}
+            domain={domain}
+            ticks={ticks}
+            series={series}
+            showOther={showOther}
+            weightAxis={weightAxis}
+            kcalAxis={kcalAxis}
+            defaultIndex={defaultIndex}
+            locked={locked !== null}
+            onActive={onActive}
+            onLeave={onLeave}
+            onPick={onPick}
+            onRelease={onRelease}
+          />
+          {hint && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <span className="rounded border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow">
+                Ctrl + scroll to zoom
+              </span>
+            </div>
+          )}
         </div>
       </section>
     </div>

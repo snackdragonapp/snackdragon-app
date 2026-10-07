@@ -55,8 +55,15 @@
   --my-color-alert-error-fg:        #991b1b;  /* red-800   */
 
   /* Charts */
-  --my-color-chart-goal-line:       #6b7280;  /* gray-500 */
-  --my-color-chart-no-goal-point:   #9ca3af;  /* gray-400 */
+  --my-color-chart-goal-line: #6b7280;  /* gray-500 */
+  --my-color-chart-other:     #9ca3af;  /* gray-400: foods folded into "Other" */
+  /* Categorical series (validated for CVD separation on the light card surface) */
+  --my-color-chart-1: #2a78d6;  /* blue */
+  --my-color-chart-2: #eb6834;  /* orange */
+  --my-color-chart-3: #1baf7a;  /* aqua */
+  --my-color-chart-4: #eda100;  /* yellow */
+  --my-color-chart-5: #e87ba4;  /* magenta */
+  --my-color-chart-6: #008300;  /* green */
 
   /* Borders and dividers */
   --my-color-border:  #e5e7eb; /* gray-200 */
@@ -116,8 +123,15 @@
     --my-color-alert-error-fg:        #fecaca; /* red-200  */
 
     /* Charts */
-    --my-color-chart-goal-line:     #94a3b8; /* slate-400 */
-    --my-color-chart-no-goal-point: #a1a1aa; /* zinc-400 */
+    --my-color-chart-goal-line: #94a3b8; /* slate-400 */
+    --my-color-chart-other:     #71717a; /* zinc-500 */
+    /* Same six hues re-stepped for the dark card surface */
+    --my-color-chart-1: #3987e5;
+    --my-color-chart-2: #d95926;
+    --my-color-chart-3: #199e70;
+    --my-color-chart-4: #c98500;
+    --my-color-chart-5: #d55181;
+    --my-color-chart-6: #008300;
 
     /* Borders and dividers */
     --my-color-border:  #1f2937; /* gray-800 */
@@ -195,7 +209,13 @@ body {
   --color-alert-error-fg: var(--my-color-alert-error-fg);
 
   --color-chart-goal-line: var(--my-color-chart-goal-line);
-  --color-chart-no-goal-point: var(--my-color-chart-no-goal-point);
+  --color-chart-other: var(--my-color-chart-other);
+  --color-chart-1: var(--my-color-chart-1);
+  --color-chart-2: var(--my-color-chart-2);
+  --color-chart-3: var(--my-color-chart-3);
+  --color-chart-4: var(--my-color-chart-4);
+  --color-chart-5: var(--my-color-chart-5);
+  --color-chart-6: var(--my-color-chart-6);
 
   --color-border:  var(--my-color-border);
   --color-divider: var(--my-color-divider);

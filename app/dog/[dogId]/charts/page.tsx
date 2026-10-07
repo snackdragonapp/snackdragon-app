@@ -5,23 +5,54 @@ import { dogHref } from '@/lib/dogHref';
 import ChartsClient from '@/components/ChartsClient';
 import RealtimeBridge from '@/components/realtime/RealtimeBridge';
 import { safeNextPath } from '@/lib/safeNext';
+import { buildChartData, type EntryInput } from '@/lib/chartData';
 
 export const dynamic = 'force-dynamic';
 
-function toUTCms(ymd: string): number {
-  const [y, m, d] = ymd.split('-').map(Number);
-  return Date.UTC(y, m - 1, d, 12, 0, 0); // ✅ UTC noon
-}
-
 // NOTE: numeric columns come back as string; accept string | number and cast later.
 type WeightRow = { measured_at: string; weight_kg: string | number };
-type GoalRow   = { start_date: string; kcal_target: number };
-type DailyRow  = {
-  date: string;
-  planned_kcal: string | number;
-  eaten_kcal: string | number;
-  total_kcal: string | number;
+type GoalRow = { start_date: string; kcal_target: number };
+type EntryRow = {
+  name: string;
+  catalog_item_id: string | null;
+  kcal_snapshot: string | number;
+  // Embedded to-one relation; defensively allow the array shape too.
+  days: { date: string } | { date: string }[] | null;
 };
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+// PostgREST caps a single response at 1000 rows, so page through the entries.
+const PAGE = 1000;
+
+async function fetchAllEntries(supabase: Supabase, dogId: string): Promise<EntryInput[]> {
+  const out: EntryInput[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('entries')
+      .select('name,catalog_item_id,kcal_snapshot,days!inner(date)')
+      .eq('days.dog_id', dogId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+      .returns<EntryRow[]>();
+    if (error) throw new Error(error.message);
+
+    const page = data ?? [];
+    for (const e of page) {
+      const day = Array.isArray(e.days) ? e.days[0] : e.days;
+      if (!day?.date) continue;
+      out.push({
+        date: day.date,
+        name: e.name,
+        catalog_item_id: e.catalog_item_id,
+        kcal: Number(e.kcal_snapshot),
+      });
+    }
+    if (page.length < PAGE) break;
+  }
+  return out;
+}
 
 export default async function ChartsPage({
   params,
@@ -52,12 +83,12 @@ export default async function ChartsPage({
   // DogLayout validates dogId when signed in
   const dogId = dogIdParam;
 
-  // Build queries with proper result typing
   const weightsQ = supabase
     .from('weights')
     .select('measured_at,weight_kg')
     .eq('dog_id', dogId)
     .order('measured_at', { ascending: true })
+    .order('created_at', { ascending: true })
     .returns<WeightRow[]>();
 
   const goalsQ = supabase
@@ -67,58 +98,25 @@ export default async function ChartsPage({
     .order('start_date', { ascending: true })
     .returns<GoalRow[]>();
 
-  const dailyQ = supabase
-    .rpc('get_daily_kcal_totals', { p_dog_id: dogId })
-    .returns<DailyRow[]>();
-
-  // Promise.all wants real Promises in some TS setups; .then(r => r) makes it explicit
-  const [{ data: weights }, { data: goals }, { data: daily }] = await Promise.all([
-    weightsQ.then(r => r),
-    goalsQ.then(r => r),
-    dailyQ.then(r => r),
+  const [weightsRes, goalsRes, entries] = await Promise.all([
+    weightsQ.then((r) => r),
+    goalsQ.then((r) => r),
+    fetchAllEntries(supabase, dogId),
   ]);
+  if (weightsRes.error) throw new Error(weightsRes.error.message);
+  if (goalsRes.error) throw new Error(goalsRes.error.message);
 
-  const goalsAsc = (goals ?? []).map(g => ({
-    start: g.start_date,
-    target: Number(g.kcal_target),
-    t: toUTCms(g.start_date),
-  }));
-
-  function activeGoal(ymd: string): number | null {
-    if (!goalsAsc.length) return null;
-    let lo = 0, hi = goalsAsc.length - 1, ans: number | null = null;
-    const t = toUTCms(ymd);
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      if (goalsAsc[mid].t <= t) {
-        ans = goalsAsc[mid].target;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    return ans;
-  }
-
-  const weightsWithGoal = (weights ?? []).map(w => ({
-    t: toUTCms(w.measured_at),
-    y: Number(w.weight_kg), // handles string|number
-    goal: activeGoal(w.measured_at),
-    ymd: w.measured_at,
-  }));
-
-  // after you’ve loaded the data:
-  const dailyArray: DailyRow[] = Array.isArray(daily) ? daily : [];
-
-  const dailyWithGoal = dailyArray
-    .map(d => ({
-      t: toUTCms(d.date),
-      total: Number(d.total_kcal),
-      goal: activeGoal(d.date),
-      ymd: d.date,
-    }))
-    // Ignore days that have a day row but no calories logged.
-    .filter(d => d.total > 0);
+  const { rows, series } = buildChartData({
+    weights: (weightsRes.data ?? []).map((w) => ({
+      measured_at: w.measured_at,
+      weight_kg: Number(w.weight_kg),
+    })),
+    goals: (goalsRes.data ?? []).map((g) => ({
+      start_date: g.start_date,
+      kcal_target: Number(g.kcal_target),
+    })),
+    entries,
+  });
 
   return (
     <main className="mx-auto max-w-2xl p-6 space-y-6 font-sans bg-canvas">
@@ -130,7 +128,8 @@ export default async function ChartsPage({
           </Link>
         )}
       </div>
-      <ChartsClient weights={weightsWithGoal} daily={dailyWithGoal} />
+
+      <ChartsClient dogId={dogId} rows={rows} series={series} />
 
       {/* Realtime sync for data feeding Charts */}
       <RealtimeBridge
