@@ -261,6 +261,8 @@ type LinkedChartsProps = {
   rows: ChartRow[];
   domain: [number, number];
   ticks: XTicks;
+  /** Shown beside the weight title when the window matches no preset. */
+  windowLabel: string | null;
   series: ChartSeries[];
   showOther: boolean;
   /** Y axes come from the full history so zooming and panning never rescale the charts. */
@@ -278,6 +280,7 @@ const LinkedCharts = memo(function LinkedCharts({
   rows,
   domain,
   ticks,
+  windowLabel,
   series,
   showOther,
   weightAxis,
@@ -307,12 +310,22 @@ const LinkedCharts = memo(function LinkedCharts({
 
   const tickStyle = { fontSize: 12, fill: AXIS_TEXT };
 
+  // The two plots share whatever height the parent gives, 40/60, with floors
+  // below which the page scrolls instead of squashing them.
   return (
-    <div onClick={locked ? onRelease : undefined}>
-      <div style={{ pointerEvents: locked ? 'none' : 'auto', touchAction: 'pan-y' }}>
+    <div className="flex h-full flex-col" onClick={locked ? onRelease : undefined}>
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        style={{ pointerEvents: locked ? 'none' : 'auto', touchAction: 'pan-y' }}
+      >
         {/* Weight */}
-        <h2 className="font-semibold text-sm">Weight (kg)</h2>
-        <div className="mt-1" style={{ width: '100%', height: 200 }}>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+          <h2 className="font-semibold text-sm">Weight (kg)</h2>
+          {windowLabel && (
+            <span className="text-xs text-muted-foreground tabular-nums">{windowLabel}</span>
+          )}
+        </div>
+        <div className="mt-1 min-h-[150px] flex-[2_1_0%]">
           {weightAxis ? (
             <ResponsiveContainer>
               <ComposedChart
@@ -382,9 +395,36 @@ const LinkedCharts = memo(function LinkedCharts({
           )}
         </div>
 
-        {/* Calories */}
-        <h2 className="font-semibold text-sm mt-4">Calories (kcal)</h2>
-        <div className="mt-1" style={{ width: '100%', height: 260 }}>
+        {/* Calories, with the legend sharing the title line */}
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+          <h2 className="font-semibold text-sm">Calories (kcal)</h2>
+          <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            {series.map((s, i) => (
+              <li key={s.key} className="flex items-center gap-1">
+                <span
+                  className="inline-block h-2 w-2 rounded-sm"
+                  style={{ background: SERIES_COLORS[i] }}
+                />
+                {s.label}
+              </li>
+            ))}
+            {showOther && (
+              <li className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: OTHER_COLOR }} />
+                Other
+              </li>
+            )}
+            <li className="flex items-center gap-1">
+              <span className="inline-block h-0.5 w-3.5" style={{ background: INK }} />
+              7-day avg
+            </li>
+            <li className="flex items-center gap-1">
+              <span className="inline-block w-3.5 border-t-2 border-dashed" style={{ borderColor: GOAL_COLOR }} />
+              Goal
+            </li>
+          </ul>
+        </div>
+        <div className="mt-1 min-h-[180px] flex-[3_1_0%]">
           <ResponsiveContainer>
             <ComposedChart
               data={rows}
@@ -477,33 +517,6 @@ const LinkedCharts = memo(function LinkedCharts({
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-
-        {/* Legend */}
-        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {series.map((s, i) => (
-            <li key={s.key} className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ background: SERIES_COLORS[i] }}
-              />
-              {s.label}
-            </li>
-          ))}
-          {showOther && (
-            <li className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: OTHER_COLOR }} />
-              Other
-            </li>
-          )}
-          <li className="flex items-center gap-1.5">
-            <span className="inline-block h-0.5 w-4" style={{ background: INK }} />
-            7-day avg
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: GOAL_COLOR }} />
-            Goal
-          </li>
-        </ul>
       </div>
     </div>
   );
@@ -529,6 +542,7 @@ function Readout({
   const shown = row.items.slice(0, READOUT_MAX_ITEMS);
   const rest = row.items.slice(READOUT_MAX_ITEMS);
   const restKcal = rest.reduce((a, it) => a + it.kcal, 0);
+  const pct = (kcal: number) => `${Math.round((kcal / row.total) * 100)}%`;
 
   return (
     <div>
@@ -549,7 +563,7 @@ function Readout({
         </Link>
       </div>
 
-      <div className="mt-1 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+      <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">
         <div>
           <span className="text-muted-foreground">Weight </span>
           {row.weight !== null ? (
@@ -582,35 +596,28 @@ function Readout({
         )}
       </div>
 
-      {/* Fixed minimum height so the charts below don't jump as the list changes. */}
-      <ul className="mt-2 min-h-[10.5rem] text-sm">
+      {/* Foods as wrapped chips; two lines reserved so the charts don't jump between days. */}
+      <ul className="mt-1.5 flex min-h-[2.75rem] flex-wrap content-start gap-x-3 gap-y-1 text-sm">
         {row.items.length === 0 ? (
-          <li className="py-1 text-subtle-foreground">Nothing logged this day.</li>
+          <li className="text-subtle-foreground">Nothing logged this day.</li>
         ) : (
           <>
             {shown.map((it, i) => (
-              <li key={`${it.name}-${i}`} className="flex items-center gap-2 py-1">
+              <li key={`${it.name}-${i}`} className="flex max-w-full items-center gap-1.5">
                 <span
                   className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
                   style={{ background: colorForSlot(it.slot) }}
                 />
-                <span className="min-w-0 flex-1 truncate">{it.name}</span>
-                <span className="tabular-nums font-medium">{fmtKcal(it.kcal)}</span>
-                <span className="w-10 text-right tabular-nums text-subtle-foreground">
-                  {Math.round((it.kcal / row.total) * 100)}%
-                </span>
+                <span className="truncate">{it.name}</span>
+                <span className="shrink-0 font-medium tabular-nums">{fmtKcal(it.kcal)}</span>
+                <span className="shrink-0 tabular-nums text-subtle-foreground">· {pct(it.kcal)}</span>
               </li>
             ))}
             {rest.length > 0 && (
-              <li className="flex items-center gap-2 py-1 text-subtle-foreground">
-                <span className="inline-block h-2.5 w-2.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">
-                  {rest.length} more item{rest.length === 1 ? '' : 's'}
-                </span>
+              <li className="flex items-center gap-1.5 text-subtle-foreground">
+                <span>+{rest.length} more</span>
                 <span className="tabular-nums">{fmtKcal(restKcal)}</span>
-                <span className="w-10 text-right tabular-nums">
-                  {Math.round((restKcal / row.total) * 100)}%
-                </span>
+                <span className="tabular-nums">· {pct(restKcal)}</span>
               </li>
             )}
           </>
@@ -637,10 +644,13 @@ export default function ChartsClient({
   dogId,
   rows,
   series,
+  backHref,
 }: {
   dogId: string;
   rows: ChartRow[];
   series: ChartSeries[];
+  /** "Back to day" link target, when the page was opened from a day. */
+  backHref: string | null;
 }) {
   const searchParams = useSearchParams();
   const [view, setView] = useState<View | null>(() =>
@@ -736,8 +746,27 @@ export default function ChartsClient({
     if (hintTimer.current) clearTimeout(hintTimer.current);
   }, []);
 
-  // ── Zoom gestures: Ctrl+wheel / trackpad pinch on desktop, two-finger pinch on touch. ──
+  // ── Fit the charts to the viewport: measure where they start (the readout
+  // above them changes height) and let CSS take the rest of the screen. ──
   const gestureRef = useRef<HTMLDivElement>(null);
+  const [chartsTop, setChartsTop] = useState<number | null>(null);
+  useEffect(() => {
+    const el = gestureRef.current;
+    if (!el) return;
+    const measure = () => {
+      setChartsTop(Math.round(el.getBoundingClientRect().top + window.scrollY));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (el.parentElement) ro.observe(el.parentElement);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [n]);
+
+  // ── Zoom gestures: Ctrl+wheel / trackpad pinch on desktop, two-finger pinch on touch. ──
   const viewRef = useRef<View | null>(view);
   useEffect(() => {
     viewRef.current = view;
@@ -897,11 +926,26 @@ export default function ChartsClient({
     if (!dragMovedRef.current) setLockedYmd(null);
   }, []);
 
+  const titleRow = (children?: React.ReactNode) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <h1 className="mr-auto text-2xl font-bold">Charts</h1>
+      {children}
+      {backHref && (
+        <Link href={backHref} className="rounded border px-2 py-1 text-sm hover:bg-control-hover">
+          ‹ Back to day
+        </Link>
+      )}
+    </div>
+  );
+
   if (n === 0) {
     return (
-      <section className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-        Nothing to chart yet. Log some entries or add a weight to get started.
-      </section>
+      <>
+        {titleRow()}
+        <section className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          Nothing to chart yet. Log some entries or add a weight to get started.
+        </section>
+      </>
     );
   }
 
@@ -922,36 +966,38 @@ export default function ChartsClient({
       : view !== null && res.len === Math.min(days, n) && res.start === n - res.len;
   const customWindow = !RANGES.some((r) => presetActive(r.days));
 
+  const rangeControl = (
+    <div role="group" aria-label="Date range" className="flex gap-1.5 text-sm">
+      {RANGES.map((r) => {
+        const active = presetActive(r.days);
+        return (
+          <button
+            key={r.key}
+            type="button"
+            onClick={() => {
+              stopZoomAnim();
+              setView(presetView(r.days, n));
+            }}
+            aria-pressed={active}
+            className={
+              'rounded border px-2 py-1 hover:bg-control-hover focus:outline-none focus:ring-2 focus:ring-control-ring ' +
+              (active ? 'bg-nav-item-active font-medium' : '')
+            }
+          >
+            {r.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const windowLabel = customWindow
+    ? `${fmtMediumDate(rows[from].ymd)} – ${fmtMediumDate(rows[to].ymd)}`
+    : null;
+
   return (
-    <div className="space-y-3">
-      {/* Range control */}
-      <div role="group" aria-label="Date range" className="flex flex-wrap items-center gap-2 text-sm">
-        {RANGES.map((r) => {
-          const active = presetActive(r.days);
-          return (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => {
-                stopZoomAnim();
-                setView(presetView(r.days, n));
-              }}
-              aria-pressed={active}
-              className={
-                'rounded border px-2 py-1 hover:bg-control-hover focus:outline-none focus:ring-2 focus:ring-control-ring ' +
-                (active ? 'bg-nav-item-active font-medium' : '')
-              }
-            >
-              {r.label}
-            </button>
-          );
-        })}
-        {customWindow && (
-          <span className="text-muted-foreground tabular-nums">
-            {fmtMediumDate(rows[from].ymd)} – {fmtMediumDate(rows[to].ymd)}
-          </span>
-        )}
-      </div>
+    <>
+      {titleRow(rangeControl)}
 
       <section className="rounded-lg border bg-card p-4">
         <Readout
@@ -960,17 +1006,24 @@ export default function ChartsClient({
           prevWeight={prevWeights[activeIdx]}
           pinned={locked !== null}
         />
-        <div className="my-4 border-t" />
+        <div className="my-3 border-t" />
+        {/* Height: the rest of the viewport below this point (see .charts-fit),
+            never less than the two plots' floors plus their titles. */}
         <div
           ref={gestureRef}
           onPointerDown={onPointerDown}
-          className="relative select-none"
-          style={{ cursor: view ? 'grab' : undefined }}
+          className="charts-fit relative select-none"
+          style={{
+            cursor: view ? 'grab' : undefined,
+            height: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
+            minHeight: 400,
+          }}
         >
           <LinkedCharts
             rows={visible}
             domain={domain}
             ticks={ticks}
+            windowLabel={windowLabel}
             series={series}
             showOther={showOther}
             weightAxis={weightAxis}
@@ -991,6 +1044,6 @@ export default function ChartsClient({
           )}
         </div>
       </section>
-    </div>
+    </>
   );
 }

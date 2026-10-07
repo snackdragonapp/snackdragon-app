@@ -370,6 +370,21 @@ body {
   .sd-sk-nav { width: 100%; justify-content: flex-start; }
 }
 
+/* ------------------------------------------------------------------
+   Charts page: space below the plots that must stay clear so the whole
+   page fits the viewport (card + page padding, plus the pinned mobile nav).
+   ------------------------------------------------------------------ */
+
+.charts-fit {
+  --charts-bottom: 2.5rem;
+}
+
+@media (max-width: 639.98px) {
+  .charts-fit {
+    --charts-bottom: calc(2.5rem + 3.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Tailwind import must remain last */
 @import "tailwindcss";
 

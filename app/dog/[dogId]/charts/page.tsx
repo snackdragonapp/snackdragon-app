@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { dogHref } from '@/lib/dogHref';
 import ChartsClient from '@/components/ChartsClient';
@@ -120,16 +119,8 @@ export default async function ChartsPage({
 
   return (
     <main className="mx-auto max-w-2xl p-6 space-y-6 font-sans bg-canvas">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Charts</h1>
-        {next && (
-          <Link href={next} className="rounded border px-2 py-1 text-sm hover:bg-control-hover">
-            ‹ Back to day
-          </Link>
-        )}
-      </div>
-
-      <ChartsClient dogId={dogId} rows={rows} series={series} />
+      {/* Title row (with the range control) is rendered by the client. */}
+      <ChartsClient dogId={dogId} rows={rows} series={series} backHref={next} />
 
       {/* Realtime sync for data feeding Charts */}
       <RealtimeBridge
