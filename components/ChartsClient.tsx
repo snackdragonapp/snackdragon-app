@@ -185,6 +185,11 @@ function pickTicks(rows: ChartRow[], from: number, to: number): XTicks {
 // ───────────────────────────────────────────────────────────────
 
 /** The plot's horizontal extent in client coordinates (the element may carry padding). */
+/** True when an event target lies inside one of the two plot boxes (data-plot). */
+function inPlot(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-plot]') !== null;
+}
+
 function plotBox(el: HTMLElement): { left: number; width: number } {
   const rect = el.getBoundingClientRect();
   const cs = getComputedStyle(el);
@@ -294,10 +299,9 @@ const LinkedCharts = memo(function LinkedCharts({
   const tickStyle = { fontSize: 12, fill: AXIS_TEXT };
 
   // The two plots share whatever height the parent gives, 40/60, with floors
-  // below which the page scrolls instead of squashing them. Each plot slot
-  // owns its touches (touch-action: none) and reaches sideways over the card
-  // padding and page margin; the titles between and around them keep the
-  // browser's default touch handling, so a finger there scrolls the page.
+  // below which the page scrolls instead of squashing them. Only the two plot
+  // boxes (data-plot: the rectangle the chart is drawn in, axes included) take
+  // gestures; titles, padding and margins keep the browser's default handling.
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 flex-col">
@@ -311,11 +315,12 @@ const LinkedCharts = memo(function LinkedCharts({
             size comes from flexing in a min-height box, but an absolute
             inset does. */}
         <div
-          className="relative -mx-10 mt-2 min-h-[150px] flex-[2_1_0%] px-10"
+          className="relative mt-2 min-h-[150px] flex-[2_1_0%]"
           style={{ touchAction: 'none' }}
+          data-plot=""
         >
           {weightAxis ? (
-            <div className="absolute inset-y-0 left-10 right-10">
+            <div className="absolute inset-0">
             <ResponsiveContainer>
               <ComposedChart data={rows} margin={CHART_MARGIN} accessibilityLayer={false}>
                 <CartesianGrid stroke={GRID} />
@@ -381,10 +386,11 @@ const LinkedCharts = memo(function LinkedCharts({
             and the two lines are keyed beside their values in the stats row. */}
         <h2 className="mt-6 font-semibold text-sm">Calories (kcal)</h2>
         <div
-          className="relative -mx-10 mt-2 min-h-[180px] flex-[3_1_0%] px-10"
+          className="relative mt-2 min-h-[180px] flex-[3_1_0%]"
           style={{ touchAction: 'none' }}
+          data-plot=""
         >
-          <div className="absolute inset-y-0 left-10 right-10">
+          <div className="absolute inset-0">
           <ResponsiveContainer>
             <ComposedChart data={rows} margin={CHART_MARGIN} accessibilityLayer={false}>
               <CartesianGrid stroke={GRID} />
@@ -875,6 +881,7 @@ export default function ChartsClient({
     // forwarded to the page by hand, which feels the same.
     let lastZoomAt = 0;
     const onWheel = (e: WheelEvent) => {
+      if (!inPlot(e.target)) return; // titles and margins: the browser's own scrolling
       const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 800 : e.deltaY;
       const dx = e.deltaMode === 1 ? e.deltaX * 33 : e.deltaMode === 2 ? e.deltaX * 800 : e.deltaX;
       e.preventDefault();
@@ -913,8 +920,7 @@ export default function ChartsClient({
     // reach a listener on the charts. Listen on the document instead and take
     // any two-finger gesture that has at least one finger over the charts.
     // One finger is left to Recharts (scrub); it never scrolls the page here.
-    const touchesHere = (e: TouchEvent) =>
-      Array.from(e.touches).some((t) => el.contains(t.target as Node));
+    const touchesHere = (e: TouchEvent) => Array.from(e.touches).some((t) => inPlot(t.target));
     // Diagnostics: present only when the ?debug=touch overlay is mounted.
     const dbg = (s: string) => window.__chartsTouchLog?.(s);
     const fmtView = (v: View | null) =>
@@ -922,7 +928,7 @@ export default function ChartsClient({
     // One finger over the charts scrubs: the day under it becomes the hover.
     const scrub = (e: TouchEvent) => {
       const t = e.touches[0];
-      if (!pinch && el.contains(t.target as Node)) {
+      if (!pinch && inPlot(t.target)) {
         const ymd = ymdAtRef.current(t.clientX);
         if (ymd) setHoverYmd(ymd);
       }
@@ -994,6 +1000,7 @@ export default function ChartsClient({
       const el = gestureRef.current;
       const base = viewRef.current;
       if (!el || !base || e.pointerType !== 'mouse' || e.button !== 0) return;
+      if (!inPlot(e.target)) return;
       stopZoomAnim();
       const startX = e.clientX;
       const move = (ev: PointerEvent) => {
@@ -1019,7 +1026,7 @@ export default function ChartsClient({
   // ── Hover and pin, computed from the pointer's x in the plot. ──
   const onPointerMoveArea = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.pointerType !== 'mouse') return;
+      if (e.pointerType !== 'mouse' || !inPlot(e.target)) return;
       const ymd = ymdAtClientX(e.clientX);
       if (ymd) setHoverYmd(ymd);
     },
@@ -1028,6 +1035,7 @@ export default function ChartsClient({
   const onClickArea = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (dragMovedRef.current) return; // the click that ends a drag
+      if (!inPlot(e.target)) return;
       setLockedYmd((cur) => (cur !== null ? null : ymdAtClientX(e.clientX)));
     },
     [ymdAtClientX]
@@ -1131,10 +1139,7 @@ export default function ChartsClient({
           onClick={onClickArea}
           onMouseEnter={onEnterArea}
           onMouseLeave={onLeaveArea}
-          // Negative margins stretch the gesture zone across the card padding and
-          // page margin (the box stays transparent), so a finger landing there
-          // still counts as "over the charts".
-          className="charts-fit relative -mx-10 mt-6 flex select-none flex-col px-10"
+          className="charts-fit relative mt-6 flex select-none flex-col"
           style={{
             cursor: view ? 'grab' : undefined,
             minHeight: `calc(100dvh - ${chartsTop ?? 360}px - var(--charts-bottom))`,
